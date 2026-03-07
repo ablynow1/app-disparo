@@ -49,6 +49,9 @@ RUN pnpm turbo run build --filter=web...
 FROM base AS runner
 WORKDIR /app
 
+# VITAL: Prisma precisa de SSL nativo no Alpine para a Query Engine rodar
+RUN apk add --no-cache libc6-compat openssl
+
 # Variaveis de ambiente para Produção Node do Next.js
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

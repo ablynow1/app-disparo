@@ -50,7 +50,8 @@ RUN pnpm turbo run build --filter=api...
 FROM base AS runner
 WORKDIR /app
 
-RUN apk add --no-cache openssl
+# Adicionamos openssl e libc6-compat para garantir o motor C++ do Prisma
+RUN apk add --no-cache libc6-compat openssl
 
 ENV NODE_ENV=production
 
