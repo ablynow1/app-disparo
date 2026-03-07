@@ -16,15 +16,47 @@ export default async function DashboardPage() {
   
   // Paraleliza as queries pesadas para ganhar ms de performance. 
   // NOTA: Os contadores globais saíram daqui e foram isolados em Cache!
-  const [
-    recentLogs
-  ] = await Promise.all([
-    prisma.conversationLog.findMany({
-      take: 6,
-      orderBy: { createdAt: 'desc' },
-      include: { contact: true },
-    })
-  ]);
+  let recentLogs: any[] = [];
+  let dbError: string | null = null;
+  
+  try {
+    const [fetchedLogs] = await Promise.all([
+      prisma.conversationLog.findMany({
+        take: 6,
+        orderBy: { createdAt: 'desc' },
+        include: { contact: true },
+      })
+    ]);
+    recentLogs = fetchedLogs;
+  } catch (error: any) {
+    dbError = error.message || error.toString();
+  }
+
+  // Intercepta a quebra 500 do Next.js e exibe o Raio-X Diagnóstico
+  if (dbError) {
+    return (
+      <div className="flex flex-col gap-6 mb-8 p-8 border border-red-500/50 bg-red-950/20 rounded-3xl mt-10">
+        <h1 className="text-3xl font-semibold tracking-tight text-red-400">🚨 Falha Crítica de Conexão no Banco</h1>
+        <p className="text-sm text-zinc-300">O servidor da AWS carregou sua página com sucesso, mas o Next.js foi impedido de puxar os dados do MongoDB Atlas e quebrou o carregamento da lista de Contatos.</p>
+        
+        <div className="bg-black/50 p-6 rounded-2xl border border-red-900/50">
+           <h3 className="text-sm font-semibold text-red-300 mb-2 uppercase tracking-wide">CAUSA RAIZ (MENSAGEM SECRETA DO PRISMA):</h3>
+           <pre className="text-red-200 text-xs whitespace-pre-wrap font-mono">{dbError}</pre>
+        </div>
+
+        <div className="bg-black/50 p-6 rounded-2xl border border-yellow-900/50">
+           <h3 className="text-sm font-semibold text-yellow-300 mb-2 uppercase tracking-wide">VERIFICAÇÃO DE VARIÁVEIS NA AWS:</h3>
+           <ul className="text-sm text-yellow-100/80 space-y-2 font-mono">
+             <li>DATABASE_URL: {process.env.DATABASE_URL ? `Preenchida (${process.env.DATABASE_URL.substring(0, 20)}...)` : '⛔ VAZIA! (O .env.prod não injetou na AWS)'}</li>
+             <li>NEXT_PUBLIC_API_URL: {process.env.NEXT_PUBLIC_API_URL || 'Vazia'}</li>
+             <li>NODE_ENV: {process.env.NODE_ENV}</li>
+           </ul>
+        </div>
+        
+        <p className="text-sm text-zinc-400 mt-4 font-semibold text-white bg-red-900/30 p-4 rounded-xl">👉 Tire print exato desta tela vermelha e mande para a I.A poder te guiar para o conserto exato na sua conta MongoDB ou O.S AWS!</p>
+      </div>
+    );
+  }
 
   return (
     <>

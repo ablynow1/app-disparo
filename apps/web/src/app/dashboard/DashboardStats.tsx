@@ -2,9 +2,16 @@ import { Activity, LayoutDashboard, Link2, Zap } from 'lucide-react';
 import { getDashboardMetrics } from '@/actions/metrics';
 
 export async function DashboardStats() {
-  // A chamada abaixo é Ultra-Rapida (Zero Lag).
-  // A execução só baterá no banco 1x e ficará viva na CDN/Redis do Next.js.
-  const metrics = await getDashboardMetrics();
+  let metrics;
+  try {
+    metrics = await getDashboardMetrics();
+  } catch (error: any) {
+    return (
+      <div className="col-span-full bg-red-950/20 border border-red-500/50 p-6 rounded-3xl text-red-400 text-sm">
+        Falha no Banco ao puxar métricas: <span className="font-mono text-xs">{error.message || error.toString()}</span>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
