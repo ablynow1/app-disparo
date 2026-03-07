@@ -31,7 +31,7 @@ COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 
 # Instala todas dependências
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 COPY --from=builder /app/out/full/ .
 

@@ -32,7 +32,7 @@ COPY .gitignore .gitignore
 COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Copia o código fonte do app web extraído do monorepo
 COPY --from=builder /app/out/full/ .
