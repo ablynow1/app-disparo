@@ -59,7 +59,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 apiuser
 
 # Puxa o instalador e código final (aqui a api usa dist/ e não standalone)
-COPY --from=installer /app . 
+COPY --from=installer --chown=apiuser:nodejs /app . 
 
 USER apiuser
 

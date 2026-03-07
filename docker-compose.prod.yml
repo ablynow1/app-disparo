@@ -31,8 +31,20 @@ services:
       - app_network
 
   # -----------------------------------------------------------------------------------
-  # POSTGRESQL REMOVIDO: O Banco de Dados agora é hospedado na Nuvem MongoDB Atlas
+  # POSTGRESQL (Servidor Dedicado para a Engine Evolution API)
   # -----------------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: supersaas_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${REDIS_PASS:-super_senha_redis}
+      POSTGRES_DB: evolution
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
 
   # -----------------------------------------------------------------------------------
   # REDIS: Sistema Nervoso do BullMQ
@@ -112,27 +124,30 @@ services:
     environment:
       - AUTHENTICATION_API_KEY=${EVO_KEY:-evolution_global_key}
       - SERVER_PORT=8080
-      - SERVER_URL=https://${DOMAIN_NAME}/evol
-      - DATABASE_PROVIDER=mongodb
-      - DATABASE_CONNECTION_URI=${DATABASE_URL}
+      - SERVER_URL=http://3.144.26.191/evol
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://postgres:${REDIS_PASS:-super_senha_redis}@postgres:5432/evolution?schema=public
       - REDIS_URI=redis://:${REDIS_PASS:-super_senha_redis}@redis:6379
     networks:
       - app_network
+    depends_on:
+      - postgres
+      - redis
     deploy:
       resources:
         limits:
           memory: 1G # Controla vazamentos de Chromium em instâncias leves VPS
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.evolution.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/evol/`)"
-      - "traefik.http.routers.evolution.entrypoints=websecure"
-      - "traefik.http.routers.evolution.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.evolution.rule=PathPrefix(`/evol/`)"
+      - "traefik.http.routers.evolution.entrypoints=web"
       - "traefik.http.services.evolution.loadbalancer.server.port=8080"
       - "traefik.http.middlewares.strip-evol.stripprefix.prefixes=/evol"
       - "traefik.http.routers.evolution.middlewares=strip-evol"
 
 volumes:
   redis_data:
+  postgres_data:
 
 networks:
   app_network:
