@@ -65,6 +65,9 @@ COPY --from=installer /app/apps/web/package.json ./apps/web/package.json
 # Tem exatamente OS MEGAS NECESSÁRIOS. E já inclui a engine do node
 COPY --from=installer --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=installer --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
+# COPIA VITAL: Tras as integrações locais (Banco e Interfaces) que o Standalone as vezes não rastreia no monorepo
+COPY --from=installer --chown=nextjs:nodejs /app/node_modules/@app-disparo/ ./node_modules/@app-disparo/
+COPY --from=installer --chown=nextjs:nodejs /app/node_modules/.pnpm/ ./node_modules/.pnpm/
 
 USER nextjs
 
