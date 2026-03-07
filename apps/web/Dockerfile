@@ -44,7 +44,7 @@ RUN pnpm --filter @app-disparo/database run db:generate
 RUN pnpm turbo run build --filter=web...
 
 # ==========================================
-# STAGE 4: Imagem de Produção Final (Apenas O Necessário)
+# STAGE 4: Imagem de Produção Final (Apenas O Necessário + Dependências Pnpm Linkadas)
 # ==========================================
 FROM base AS runner
 WORKDIR /app
@@ -57,17 +57,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copia utilitários do Next public/ e package.json
-COPY --from=installer /app/apps/web/public ./apps/web/public
-COPY --from=installer /app/apps/web/package.json ./apps/web/package.json
-
-# Essa pasta foi gerada pelo 'output: standalone' no next.config.ts 
-# Tem exatamente OS MEGAS NECESSÁRIOS. E já inclui a engine do node
-COPY --from=installer --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
-COPY --from=installer --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
-# COPIA VITAL: Tras as integrações locais (Banco e Interfaces) que o Standalone as vezes não rastreia no monorepo
-COPY --from=installer --chown=nextjs:nodejs /app/node_modules/@app-disparo/ ./node_modules/@app-disparo/
-COPY --from=installer --chown=nextjs:nodejs /app/node_modules/.pnpm/ ./node_modules/.pnpm/
+# Copia toda a aplicação já instalada e compilada pelo estagio installer
+COPY --from=installer --chown=nextjs:nodejs /app .
 
 USER nextjs
 
@@ -76,4 +67,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "apps/web/server.js"]
+CMD ["pnpm", "--filter", "web", "start"]
