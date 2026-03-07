@@ -60,11 +60,18 @@ Cole isso no terminal nano e troque as chaves pelas suas:
 ```bash
 DOMAIN_NAME=app.seudominio.com.br
 DATABASE_URL=mongodb+srv://admin:senha-atlas@cluster0.abc.mongodb.net/evolution_db?retryWrites=true&w=majority
-REDIS_PASS=redis_protegido_998
-EVO_KEY=apiKey_evolution_mestra
-OPENAI_API_KEY=sk-proj-SuaChaveDoGPT
+REDIS_PASS=CrieUmaSenhaForteExemplo998
+EVO_KEY=CrieSuaSenhaDaApiDoWhatsappExemploMasterKey
+GEMINI_API_KEY=AIzaSuaChaveDoGoogleGemini
 ```
 Aperte `CTRL+O`, depois `ENTER` e `CTRL+X` para salvar e fechar.
+
+### Onde eu pego esses 5 dados do `.env.prod`?
+1. **DOMAIN_NAME**: O Domínio do seu site (Ex: `painel.minhaempresa.com.br`). Você decide esse nome.
+2. **DATABASE_URL**: No final do **Passo 4** lá no MongoDB Atlas, quando você clica em Connect > Drivers. Copie o link inteiro lá.
+3. **REDIS_PASS**: Você inventa isso agora! É uma senha aleatória (ex: *LoboMau8899!*) pra proteger o Cache do BullMQ de invasores.
+4. **EVO_KEY**: Você também inventa agora! Será a Senha Principal *Master Key* que você vai usar ao se logar dentro da Evolution API para cadastrar os WhatsApps.
+5. **GEMINI_API_KEY**: Vá ao site **Google AI Studio** (aistudio.google.com), logue com sua conta Gmail e clique em "Get API Key" -> "Create API Key". Copie a string longa e cole aqui.
 
 ### Passo 6: Decolagem Master! 🛫
 Diga para o Orquestrador ler os Dockerfiles multi-stage, subir o Traefik SSL, Redis, Evolution e a nossa Aplicação Node Next/Fastify.

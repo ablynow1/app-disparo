@@ -63,7 +63,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASS:-super_senha_redis}@redis:6379
       - EVOLUTION_API_URL=http://evolution_api:8080
       - EVOLUTION_API_KEY=${EVO_KEY:-evolution_global_key}
-      - OPENAI_API_KEY=${OPENAI_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     networks:
       - app_network
     depends_on:

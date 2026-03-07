@@ -8,7 +8,7 @@ const envSchema = z.object({
   EVOLUTION_API_URL: z.string().url().optional(),
   EVOLUTION_API_KEY: z.string().optional(),
   INSTANCE_NAME: z.string().optional(),
-  OPENAI_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
   WEBHOOK_GLOBAL_SECRET: z.string().default('default-secret-change-me'),
 });
 
