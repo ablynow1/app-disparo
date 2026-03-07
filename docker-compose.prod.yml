@@ -91,6 +91,7 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=http://3.144.26.191:3333
+      - DATABASE_URL=${DATABASE_URL}
     networks:
       - app_network
     # O Traefik manda a RAIZ e o Frontend Inteiro para este Node Alpine
