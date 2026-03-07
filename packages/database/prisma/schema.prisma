@@ -1,0 +1,182 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------
+// MÓDULO CORE: CONTATOS E MENSAGERIA TIMELINE
+// ---------------------------------------------------------
+
+model Contact {
+  id        String   @id @default(uuid()) @map("_id")
+  remoteJid String   @unique // O ID do WhatsApp, ex: 5511999999999@s.whatsapp.net
+  pushName  String?  // O Nome que o usuário usa no WhatsApp
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages  ConversationLog[]
+}
+
+model ConversationLog {
+  id        String   @id @default(uuid()) @map("_id")
+  text      String
+  direction Direction // INBOUND ou OUTBOUND
+  createdAt DateTime @default(now())
+
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+}
+
+enum Direction {
+  INBOUND
+  OUTBOUND
+}
+
+// ---------------------------------------------------------
+// MÓDULO 1: ROTEAMENTO MULTI-INSTÂNCIA E GATILHOS
+// ---------------------------------------------------------
+
+model Instance {
+  id          String   @id @default(uuid()) @map("_id")
+  name        String
+  remoteJid   String?  @unique
+  status      String?  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relação N:M (MongoDB exige Array de IDs de ambos os lados para implicit/explicit M:N)
+  triggerRuleIds String[]
+  triggerRules   TriggerRule[] @relation(fields: [triggerRuleIds], references: [id])
+}
+
+model TriggerRule {
+  id              String   @id @default(uuid()) @map("_id")
+  name            String
+  eventType       EventType 
+  routingStrategy RoutingStrategy @default(ROUND_ROBIN)
+  delayMinutes    Int      @default(10)
+  active          Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  agentId         String?
+  agent           AIAgent? @relation(fields: [agentId], references: [id], onDelete: NoAction)
+
+  // Relação N:M - As chaves estrangeiras ficam como Array no MongoDB
+  instanceIds     String[]
+  instances       Instance[] @relation(fields: [instanceIds], references: [id])
+
+  // Indexes compostos para MongoDB
+  @@index([eventType, active])
+  @@index([agentId])
+}
+
+enum RoutingStrategy {
+  ROUND_ROBIN
+  RANDOM
+}
+
+enum EventType {
+  ABANDONED_CART
+  PIX_PENDING
+  ORDER_PAID
+  ORDER_CANCELED
+}
+
+// ---------------------------------------------------------
+// MÓDULO 2: INTEGRAÇÕES E-COMMERCE & PEDIDOS IDEMPOTENTES
+// ---------------------------------------------------------
+
+model Integration {
+  id          String   @id @default(uuid()) @map("_id")
+  provider    Provider
+  webhookUrl  String?
+  credentials Json?    
+  active      Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orders      Order[]
+}
+
+enum Provider {
+  SHOPIFY
+  YAMPI
+  APPMAX
+  HOTMART
+  KIWIFY
+}
+
+model Order {
+  id              String   @id @default(uuid()) @map("_id")
+  externalOrderId String
+  customerName    String
+  customerPhone   String
+  amount          Float
+  status          OrderStatus
+  payload         Json     
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  integrationId   String
+  integration     Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  // O Mongo Atlas Index Manager cuidará desse Constraint
+  @@unique([integrationId, externalOrderId])
+  @@index([externalOrderId])
+  @@index([status])
+  @@index([customerPhone])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELED
+  FAILED_TO_SEND
+}
+
+// ---------------------------------------------------------
+// MÓDULO 3: CÉREBRO DE INTELIGÊNCIA ARTIFICIAL (BASE RAG)
+// ---------------------------------------------------------
+
+model AIAgent {
+  id            String   @id @default(uuid()) @map("_id")
+  name          String
+  systemPrompt  String   // MongoDB não precisa de @db.Text, String suporta gigabytes
+  temperature   Float    @default(0.7)
+  provider      AIProvider @default(OPENAI)
+  isActive      Boolean  @default(true)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  knowledgeBases AIKnowledgeBase[]
+  triggerRules   TriggerRule[]
+}
+
+enum AIProvider {
+  OPENAI
+  ANTHROPIC
+  GOOGLE_VERTEX
+}
+
+model AIKnowledgeBase {
+  id        String   @id @default(uuid()) @map("_id")
+  title     String
+  content   String   
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agentId   String
+  agent     AIAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+}

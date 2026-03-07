@@ -1,0 +1,21 @@
+# ==========================================
+# GHOST CONTAINER PARA TESTES END-TO-END (E2E)
+# ==========================================
+FROM node:20-alpine
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && apk add --no-cache libc6-compat openssl
+
+WORKDIR /app
+
+# Copia tudo para o container efêmero
+COPY . .
+
+# Instala as dependências de desenvolvimento do monorepo
+RUN pnpm install
+
+# Instala a engine do Prisma (MongoDB Replica Set Support)
+RUN pnpm --filter @app-disparo/database run generate
+
+# O comando de decolagem é executar o Test Runner isolado
+CMD ["pnpm", "--filter", "api", "run", "test"]

@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # -----------------------------------------------------------------------------------
+  # MONGODB TEST DATABASE (Replica Set Mocado Localmente)
+  # Prisma exige ReplicaSet Ativo no Mongo para funcionar.
+  # -----------------------------------------------------------------------------------
+  mongo_test:
+    image: mongo:6-jammy
+    container_name: supersaas_mongo_test
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "27017:27017"
+    healthcheck:
+      # Inicia o Replica Set sozinho no primeiro boot!
+      test: mongosh --quiet --eval "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo_test:27017'}]}).ok }" | grep -q '1'
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # -----------------------------------------------------------------------------------
+  # REDIS TEST CACHE
+  # -----------------------------------------------------------------------------------
+  redis_test:
+    image: redis:7-alpine
+    container_name: supersaas_redis_test
+    ports:
+      - "6379:6379"
+
+  # -----------------------------------------------------------------------------------
+  # TEST RUNNER ENGINE: Roda o Vitest na API e Morre (Abort)
+  # -----------------------------------------------------------------------------------
+  api_test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: supersaas_api_test
+    environment:
+      - NODE_ENV=test
+      # Conecta na porta do container mock e passa o sinal de Replica Set
+      - DATABASE_URL=mongodb://mongo_test:27017/test_db?replicaSet=rs0
+      - REDIS_URL=redis://redis_test:6379
+    depends_on:
+      mongo_test:
+        condition: service_healthy
+      redis_test:
+        condition: service_started

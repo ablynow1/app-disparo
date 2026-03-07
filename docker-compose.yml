@@ -1,0 +1,39 @@
+version: '3.8'
+services:
+  evolution_api:
+    image: atendai/evolution-api:v1.8.2
+    container_name: evolution_api
+    restart: always
+    ports:
+      - "8085:8080"
+    environment:
+      - AUTHENTICATION_TYPE=apikey
+      - AUTHENTICATION_API_KEY=123456
+      - DASHBOARD_ENABLED=true
+      - DATABASE_ENABLED=false
+      - DATABASE_PROVIDER=postgresql # Adicione esta linha (mesmo com o enabled em false)
+      - WEBHOOK_GLOBAL_URL=http://192.168.100.13:3333/api/webhooks/evolution
+      - WEBHOOK_GLOBAL_ENABLED=true
+      - WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS=false
+      - WEBHOOK_EVENTS=MESSAGES_UPSERT,MESSAGES_UPDATE,SEND_MESSAGE
+    volumes:
+      - ./docker/instances:/evolution/instances
+  wm_redis:
+    image: redis:7-alpine
+    container_name: wm_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: evolution_db
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=evolution_db
+    volumes:
+      - ./docker/postgres:/var/lib/postgresql/data
