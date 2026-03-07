@@ -10,7 +10,7 @@ const envSchema = zod_1.z.object({
     EVOLUTION_API_URL: zod_1.z.string().url().optional(),
     EVOLUTION_API_KEY: zod_1.z.string().optional(),
     INSTANCE_NAME: zod_1.z.string().optional(),
-    GEMINI_API_KEY: zod_1.z.string().optional(),
+    OPENAI_API_KEY: zod_1.z.string().optional(),
     WEBHOOK_GLOBAL_SECRET: zod_1.z.string().default('default-secret-change-me'),
 });
 const _env = envSchema.safeParse(process.env);

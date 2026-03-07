@@ -3,7 +3,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.app = void 0;
 const fastify_1 = __importDefault(require("fastify"));
 const helmet_1 = __importDefault(require("@fastify/helmet"));
 const cors_1 = __importDefault(require("@fastify/cors"));
@@ -23,7 +22,6 @@ const EvolutionOutboundWorker_1 = require("../../queue/EvolutionOutboundWorker")
 const database_1 = require("@app-disparo/database");
 const redis_1 = require("../../redis/redis");
 const app = (0, fastify_1.default)({ logger: false });
-exports.app = app;
 // HARDENING 1: Helmet para mitigação sistemática de ataques XSS, Clickjacking, MIME-Sniffing e ocultação do cabeçalho "X-Powered-By"
 app.register(helmet_1.default, {
     global: true,
@@ -101,7 +99,7 @@ const gracefulShutdown = async (signal) => {
 ['SIGINT', 'SIGTERM'].forEach((signal) => {
     process.on(signal, () => gracefulShutdown(signal));
 });
-// Boot Server conditionally (evita porta ocupada durante Testes Vitest)
+// Boot Server
 const start = async () => {
     try {
         const port = env_1.env.PORT;
@@ -115,6 +113,4 @@ const start = async () => {
         process.exit(1);
     }
 };
-if (process.env.NODE_ENV !== 'test') {
-    start();
-}
+start();

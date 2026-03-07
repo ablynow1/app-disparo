@@ -1,0 +1,19 @@
+{
+  "name": "@app-disparo/database",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "prisma": "^5.11.0",
+    "typescript": "^5.4.0"
+  }
+}
