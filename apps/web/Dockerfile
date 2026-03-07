@@ -38,7 +38,7 @@ RUN pnpm install --frozen-lockfile
 COPY --from=builder /app/out/full/ .
 
 # Gera o Prisma Client
-RUN pnpm --filter @app-disparo/database run generate
+RUN pnpm --filter @app-disparo/database run db:generate
 
 # Compila o Next.js (Irá gerar a pasta .next/standalone automaticamente)
 RUN pnpm turbo run build --filter=web...

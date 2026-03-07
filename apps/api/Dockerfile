@@ -36,7 +36,7 @@ RUN pnpm install --frozen-lockfile
 COPY --from=builder /app/out/full/ .
 
 # Essencial: Gerar o Prisma Engine para rodar consultas no banco postgres
-RUN pnpm --filter @app-disparo/database run generate
+RUN pnpm --filter @app-disparo/database run db:generate
 
 # Compila o typescript para javascript na pasta dist/
 RUN pnpm turbo run build --filter=api...
