@@ -56,6 +56,8 @@ services:
       dockerfile: apps/api/Dockerfile
     container_name: supersaas_api
     restart: always
+    ports:
+      - "3333:3333"
     environment:
       - NODE_ENV=production
       - PORT=3333
@@ -71,9 +73,8 @@ services:
     # O Traefik roteia qualquer pedido batendo em `/api/` para este container
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.api.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/api/`)"
-      - "traefik.http.routers.api.entrypoints=websecure"
-      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api.rule=PathPrefix(`/api/`)"
+      - "traefik.http.routers.api.entrypoints=web"
       - "traefik.http.services.api.loadbalancer.server.port=3333"
 
   # -----------------------------------------------------------------------------------
@@ -85,18 +86,19 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: supersaas_web
     restart: always
+    ports:
+      - "3000:3000"
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=https://${DOMAIN_NAME}/api
+      - NEXT_PUBLIC_API_URL=http://3.144.26.191:3333
     networks:
       - app_network
     # O Traefik manda a RAIZ e o Frontend Inteiro para este Node Alpine
     labels:
       - "traefik.enable=true"
-      # Regra Catch-All: Roteia o domínio todo MENOS o que cair no prefixo /api/
-      - "traefik.http.routers.web.rule=Host(`${DOMAIN_NAME}`)"
-      - "traefik.http.routers.web.entrypoints=websecure"
-      - "traefik.http.routers.web.tls.certresolver=letsencrypt"
+      # Regra Catch-All MODIFICADA: Permite IP Direto ou qualquer dominio configurado
+      - "traefik.http.routers.web.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.web.entrypoints=web"
       - "traefik.http.services.web.loadbalancer.server.port=3000"
 
   # -----------------------------------------------------------------------------------
