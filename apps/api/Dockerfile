@@ -1,7 +1,7 @@
 # ==========================================
 # STAGE 1: Base de Ferramentas (pnpm e node)
 # ==========================================
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
@@ -11,7 +11,7 @@ RUN corepack enable
 # ==========================================
 FROM base AS builder
 # libc6-compat e openssl exigido pelo motor Prisma do PostgreSQL
-RUN apk add --no-cache libc6-compat openssl
+RUN apt-get update && apt-get install -y openssl
 
 WORKDIR /app
 RUN pnpm install -g turbo
@@ -23,7 +23,7 @@ RUN turbo prune api --docker
 # STAGE 3: Instalador e Compilador API
 # ==========================================
 FROM base AS installer
-RUN apk add --no-cache libc6-compat openssl
+RUN apt-get update && apt-get install -y openssl
 WORKDIR /app
 
 COPY .gitignore .gitignore
@@ -50,14 +50,14 @@ RUN pnpm turbo run build --filter=api...
 FROM base AS runner
 WORKDIR /app
 
-# Adicionamos openssl e libc6-compat para garantir o motor C++ do Prisma
-RUN apk add --no-cache libc6-compat openssl
+# Adicionamos openssl para garantir o motor C++ do Prisma
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 
 # Proteção de Execução Nível OS
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 apiuser
+RUN groupadd --system --gid 1001 nodejs
+RUN useradd --system --uid 1001 --gid nodejs apiuser
 
 # Puxa o instalador e código final (aqui a api usa dist/ e não standalone)
 COPY --from=installer --chown=apiuser:nodejs /app . 

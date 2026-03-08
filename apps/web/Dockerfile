@@ -1,7 +1,7 @@
 # ==========================================
 # STAGE 1: Base de Ferramentas (pnpm e node)
 # ==========================================
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
@@ -10,8 +10,8 @@ RUN corepack enable
 # STAGE 2: Resolvedor de Dependências (Prune)
 # ==========================================
 FROM base AS builder
-# Necessário para Prisma
-RUN apk update && apk add --no-cache libc6-compat openssl
+# Necessário para Prisma no Debian
+RUN apt-get update && apt-get install -y openssl
 
 WORKDIR /app
 # Instala turborepo globalmente para fazer o prune do monorepo
@@ -24,7 +24,7 @@ RUN turbo prune web --docker
 # STAGE 3: Instalador (Node_modules p/ Build)
 # ==========================================
 FROM base AS installer
-RUN apk update && apk add --no-cache libc6-compat openssl
+RUN apt-get update && apt-get install -y openssl
 WORKDIR /app
 
 # Copia root lockfile e workspaces
@@ -40,7 +40,7 @@ COPY --from=builder /app/out/full/ .
 # Gera o Prisma Client
 RUN pnpm --filter @app-disparo/database run db:generate
 
-# Compila o Next.js (Irá gerar a pasta .next/standalone automaticamente)
+# Compila o Next.js
 RUN pnpm turbo run build --filter=web...
 
 # ==========================================
@@ -49,16 +49,16 @@ RUN pnpm turbo run build --filter=web...
 FROM base AS runner
 WORKDIR /app
 
-# VITAL: Prisma precisa de SSL nativo no Alpine para a Query Engine rodar
-RUN apk add --no-cache libc6-compat openssl
+# VITAL: Prisma precisa de SSL nativo para a Query Engine rodar
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 # Variaveis de ambiente para Produção Node do Next.js
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # O Next.js aconselha rodar usando um usuário não-root por segurança
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN groupadd --system --gid 1001 nodejs
+RUN useradd --system --uid 1001 --gid nodejs nextjs
 
 # Copia toda a aplicação já instalada e compilada pelo estagio installer
 COPY --from=installer --chown=nextjs:nodejs /app .
