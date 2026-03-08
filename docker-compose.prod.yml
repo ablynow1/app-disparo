@@ -14,10 +14,9 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      # Redireciona tudo http -> https
-      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
-      # Configuração CA Let's Encrypt (Substitua por um e-mail seu em produção)
+      # Redirecionamento forçado desativado no momento para teste de IP na AWS (Sem dominio)
+      # - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      # - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.email=admin@seudominio.com.br"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
@@ -29,6 +28,9 @@ services:
       - ./letsencrypt:/letsencrypt
     networks:
       - app_network
+
+  # [Ocultando Postgres/Redis intermediarios sem mudanças]
+  # ...
 
   # -----------------------------------------------------------------------------------
   # POSTGRESQL (Servidor Dedicado para a Engine Evolution API)
@@ -82,16 +84,12 @@ services:
       - app_network
     depends_on:
       - redis
-    # Força a máquina O.S Alpine a consultar DNS externos para enxergar o DB Atlas
     dns:
       - 8.8.8.8
       - 1.1.1.1
-    # O Traefik roteia qualquer pedido batendo em `/api/` para este container
+    # Liberado pra uso bypass direto no IP :3333
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.api.rule=PathPrefix(`/api/`)"
-      - "traefik.http.routers.api.entrypoints=web"
-      - "traefik.http.services.api.loadbalancer.server.port=3333"
+      - "traefik.enable=false"
 
   # -----------------------------------------------------------------------------------
   # FRONTEND: AppRouter (Dashboard) Premium Next.js Standalone
@@ -102,6 +100,7 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: supersaas_web
     restart: always
+    # Porta EXPOSTA à força no DOCKER HOST. (O Cliente acessa IP:3000 direto sem Traefik)
     ports:
       - "3000:3000"
     environment:
@@ -110,17 +109,11 @@ services:
       - DATABASE_URL=${DATABASE_URL}
     networks:
       - app_network
-    # Impede que a amazon tente resolver URLS SRV (mongodb+srv) com DNS interno falho
     dns:
       - 8.8.8.8
       - 1.1.1.1
-    # O Traefik manda a RAIZ e o Frontend Inteiro para este Node Alpine
     labels:
-      - "traefik.enable=true"
-      # Regra Catch-All MODIFICADA: Permite IP Direto ou qualquer dominio configurado
-      - "traefik.http.routers.web.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.web.entrypoints=web"
-      - "traefik.http.services.web.loadbalancer.server.port=3000"
+      - "traefik.enable=false"
 
   # -----------------------------------------------------------------------------------
   # EVOLUTION MÓDULO (A Opcional Motor Externa do Sistema)
