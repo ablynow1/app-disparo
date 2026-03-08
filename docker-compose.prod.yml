@@ -82,6 +82,10 @@ services:
       - app_network
     depends_on:
       - redis
+    # Força a máquina O.S Alpine a consultar DNS externos para enxergar o DB Atlas
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     # O Traefik roteia qualquer pedido batendo em `/api/` para este container
     labels:
       - "traefik.enable=true"
@@ -106,6 +110,10 @@ services:
       - DATABASE_URL=${DATABASE_URL}
     networks:
       - app_network
+    # Impede que a amazon tente resolver URLS SRV (mongodb+srv) com DNS interno falho
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     # O Traefik manda a RAIZ e o Frontend Inteiro para este Node Alpine
     labels:
       - "traefik.enable=true"
