@@ -55,6 +55,8 @@ RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 # Variaveis de ambiente para Produção Node do Next.js
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# Redireciona cache do corepack para /tmp (gravavel por usuarios de sistema)
+ENV COREPACK_HOME=/tmp/corepack
 
 # O Next.js aconselha rodar usando um usuário não-root por segurança
 RUN groupadd --system --gid 1001 nodejs

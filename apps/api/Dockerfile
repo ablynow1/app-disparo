@@ -54,6 +54,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
+# Redireciona cache do corepack para /tmp (gravavel por usuarios de sistema)
+ENV COREPACK_HOME=/tmp/corepack
 
 # Proteção de Execução Nível OS
 RUN groupadd --system --gid 1001 nodejs
