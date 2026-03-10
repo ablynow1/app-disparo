@@ -105,6 +105,9 @@ services:
       - NEXT_PUBLIC_API_URL=http://3.144.26.191:3333
       # PostgreSQL interno (sem mais DNS SRV do MongoDB Atlas)
       - DATABASE_URL=postgresql://postgres:${REDIS_PASS:-super_senha_redis}@postgres:5432/appdisparo
+      # Evolution API acessível pelo nome do service interno Docker
+      - EVOLUTION_INTERNAL_URL=http://evolution_api:8080
+      - EVO_KEY=${EVO_KEY:-evolution_global_key}
     networks:
       - app_network
     depends_on:
