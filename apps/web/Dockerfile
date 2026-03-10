@@ -40,8 +40,10 @@ COPY --from=builder /app/out/full/ .
 # Gera o Prisma Client
 RUN pnpm --filter @app-disparo/database run db:generate
 
-# Compila o Next.js
+# Compila o Next.js com limite de memória explícito (evita OOM em t3.micro/t2.micro)
+ENV NODE_OPTIONS="--max-old-space-size=384"
 RUN pnpm turbo run build --filter=web...
+
 
 # ==========================================
 # STAGE 4: Imagem de Produção Final (Apenas O Necessário + Dependências Pnpm Linkadas)
