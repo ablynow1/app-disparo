@@ -5,7 +5,14 @@ import { BrainCircuit } from 'lucide-react';
 export const dynamic = 'force-dynamic';
 
 export default async function AiAgentsPage() {
-  const agents = await getAiAgents();
+  let agents: any[] = [];
+  let dbError: string | null = null;
+
+  try {
+    agents = await getAiAgents();
+  } catch (error: any) {
+    dbError = error?.message || error?.toString() || 'Erro desconhecido';
+  }
 
   return (
     <div className="flex flex-col gap-8 pb-10">
@@ -18,6 +25,12 @@ export default async function AiAgentsPage() {
           são plugáveis diretamente nas suas Regras de Disparo.
         </p>
       </div>
+
+      {dbError && (
+        <div className="bg-red-950/20 border border-red-500/50 p-4 rounded-2xl text-red-400 text-sm font-mono">
+          ⚠️ Falha no banco: {dbError}
+        </div>
+      )}
 
       <AgentsClient initialAgents={agents} />
     </div>

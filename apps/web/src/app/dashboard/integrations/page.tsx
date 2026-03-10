@@ -5,7 +5,14 @@ import { AppWindow, Link2 } from 'lucide-react';
 export const dynamic = 'force-dynamic';
 
 export default async function IntegrationsPage() {
-  const integrations = await getIntegrations();
+  let integrations: any[] = [];
+  let dbError: string | null = null;
+
+  try {
+    integrations = await getIntegrations();
+  } catch (error: any) {
+    dbError = error?.message || error?.toString() || 'Erro desconhecido';
+  }
 
   return (
     <div className="flex flex-col gap-8 pb-10">
@@ -18,6 +25,12 @@ export default async function IntegrationsPage() {
           um link único criptografado associado a você. Cole-o no seu Checkout e o App Disparo cuidará do resto.
         </p>
       </div>
+
+      {dbError && (
+        <div className="bg-red-950/20 border border-red-500/50 p-4 rounded-2xl text-red-400 text-sm font-mono">
+          ⚠️ Falha no banco: {dbError}
+        </div>
+      )}
 
       <div className="p-6 bg-zinc-900/30 backdrop-blur border border-zinc-800/50 rounded-3xl relative overflow-hidden">
         {/* Fundo decorativo */}

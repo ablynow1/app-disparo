@@ -87,6 +87,9 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
+    # Desativa o sufixo .compute.internal da VPC da AWS que quebra SRV do MongoDB Atlas
+    dns_search:
+      - "."
     # Liberado pra uso bypass direto no IP :3333
     labels:
       - "traefik.enable=false"
@@ -112,6 +115,9 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
+    # Desativa o sufixo .compute.internal da VPC da AWS que quebra SRV do MongoDB Atlas
+    dns_search:
+      - "."
     labels:
       - "traefik.enable=false"
 
