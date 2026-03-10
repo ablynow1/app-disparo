@@ -17,7 +17,7 @@ export function InstancesClient({ initialInstances }: { initialInstances: Instan
   const [showModal, setShowModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [qrModal, setQrModal] = useState<{ open: boolean; instance: string; qr: string | null; polling: boolean }>({
+  const [qrModal, setQrModal] = useState<{ open: boolean; instance: string; qr: string | null; polling: boolean; debugInfo?: string }>({
     open: false, instance: '', qr: null, polling: false
   });
   const [error, setError] = useState<string | null>(null);
@@ -32,15 +32,18 @@ export function InstancesClient({ initialInstances }: { initialInstances: Instan
   useEffect(() => {
     if (!qrModal.open || !qrModal.polling) return;
     const interval = setInterval(async () => {
-      const { qrCode, status } = await getQrCode(qrModal.instance);
-      if (status === 'open') {
+      const result = await getQrCode(qrModal.instance);
+      if (result.status === 'open') {
         // Conectou! Sincroniza banco e fecha modal
         await syncInstanceStatus(qrModal.instance, 'open');
         setQrModal(q => ({ ...q, open: false, polling: false, qr: null }));
         await refreshInstances();
         clearInterval(interval);
-      } else if (qrCode) {
-        setQrModal(q => ({ ...q, qr: qrCode }));
+      } else if (result.qrCode) {
+        setQrModal(q => ({ ...q, qr: result.qrCode }));
+      } else {
+        // QR não chegou - mostra debug
+        setQrModal(q => ({ ...q, debugInfo: JSON.stringify(result.raw || 'sem resposta').slice(0, 200) }));
       }
     }, 4000);
     return () => clearInterval(interval);
@@ -221,40 +224,48 @@ export function InstancesClient({ initialInstances }: { initialInstances: Instan
         </div>
       )}
 
-      {/* Modal: QR Code */}
-      {qrModal.open && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 border border-zinc-700/50 rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-zinc-100">Escanear QR Code</h2>
-              <button
-                onClick={() => setQrModal(q => ({ ...q, open: false, polling: false }))}
-                className="text-zinc-400 hover:text-zinc-200 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-sm text-zinc-400 mb-6">
-              Abra o WhatsApp → <strong className="text-zinc-300">Aparelhos conectados</strong> → <strong className="text-zinc-300">Conectar aparelho</strong> e escaneie o código abaixo.
-            </p>
-
-            <div className="bg-white p-4 rounded-2xl inline-block mb-4">
-              {qrModal.qr ? (
-                <img src={qrModal.qr} alt="QR Code WhatsApp" className="w-52 h-52 object-contain" />
-              ) : (
-                <div className="w-52 h-52 flex items-center justify-center">
-                  <Loader2 className="w-10 h-10 animate-spin text-zinc-400" />
-                </div>
-              )}
-            </div>
-
-            <p className="text-xs text-zinc-500 flex items-center justify-center gap-1.5">
-              <RefreshCw className="w-3 h-3 animate-spin" /> Atualizando automaticamente...
-            </p>
-          </div>
+  // Modal: QR Code
+  {qrModal.open && (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-900 border border-zinc-700/50 rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-zinc-100">Escanear QR Code</h2>
+          <button
+            onClick={() => setQrModal(q => ({ ...q, open: false, polling: false }))}
+            className="text-zinc-400 hover:text-zinc-200 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
-      )}
+
+        <p className="text-sm text-zinc-400 mb-6">
+          Abra o WhatsApp → <strong className="text-zinc-300">Aparelhos conectados</strong> → <strong className="text-zinc-300">Conectar aparelho</strong> e escaneie o código abaixo.
+        </p>
+
+        <div className="bg-white p-4 rounded-2xl inline-block mb-4">
+          {qrModal.qr ? (
+            <img src={qrModal.qr} alt="QR Code WhatsApp" className="w-52 h-52 object-contain" />
+          ) : (
+            <div className="w-52 h-52 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-10 h-10 animate-spin text-zinc-400" />
+              <span className="text-xs text-zinc-400 px-2">Aguardando QR Code da Evolution API...</span>
+            </div>
+          )}
+        </div>
+
+        {qrModal.debugInfo && !qrModal.qr && (
+          <div className="mt-3 bg-zinc-800 rounded-xl p-3 text-left">
+            <p className="text-xs text-amber-400 font-mono mb-1">⚠️ Resposta da Evolution API:</p>
+            <p className="text-xs text-zinc-400 font-mono break-all">{qrModal.debugInfo}</p>
+          </div>
+        )}
+
+        <p className="text-xs text-zinc-500 flex items-center justify-center gap-1.5 mt-4">
+          <RefreshCw className="w-3 h-3 animate-spin" /> Atualizando automaticamente...
+        </p>
+      </div>
+    </div>
+  )}
     </>
   );
 }
