@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mongodb"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -13,9 +13,9 @@ datasource db {
 // ---------------------------------------------------------
 
 model Contact {
-  id        String   @id @default(uuid()) @map("_id")
-  remoteJid String   @unique // O ID do WhatsApp, ex: 5511999999999@s.whatsapp.net
-  pushName  String?  // O Nome que o usuário usa no WhatsApp
+  id        String   @id @default(cuid())
+  remoteJid String   @unique
+  pushName  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -23,10 +23,10 @@ model Contact {
 }
 
 model ConversationLog {
-  id        String   @id @default(uuid()) @map("_id")
-  text      String
-  direction Direction // INBOUND ou OUTBOUND
-  createdAt DateTime @default(now())
+  id        String    @id @default(cuid())
+  text      String    @db.Text
+  direction Direction
+  createdAt DateTime  @default(now())
 
   contactId String
   contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -42,39 +42,47 @@ enum Direction {
 // ---------------------------------------------------------
 
 model Instance {
-  id          String   @id @default(uuid()) @map("_id")
+  id          String   @id @default(cuid())
   name        String
   remoteJid   String?  @unique
-  status      String?  
+  status      String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relação N:M (MongoDB exige Array de IDs de ambos os lados para implicit/explicit M:N)
-  triggerRuleIds String[]
-  triggerRules   TriggerRule[] @relation(fields: [triggerRuleIds], references: [id])
+  // Relação N:M via tabela de junção explícita (Postgres)
+  triggerRules TriggerRuleInstance[]
 }
 
 model TriggerRule {
-  id              String   @id @default(uuid()) @map("_id")
+  id              String          @id @default(cuid())
   name            String
-  eventType       EventType 
+  eventType       EventType
   routingStrategy RoutingStrategy @default(ROUND_ROBIN)
-  delayMinutes    Int      @default(10)
-  active          Boolean  @default(true)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  delayMinutes    Int             @default(10)
+  active          Boolean         @default(true)
 
-  agentId         String?
-  agent           AIAgent? @relation(fields: [agentId], references: [id], onDelete: NoAction)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // Relação N:M - As chaves estrangeiras ficam como Array no MongoDB
-  instanceIds     String[]
-  instances       Instance[] @relation(fields: [instanceIds], references: [id])
+  agentId String?
+  agent   AIAgent? @relation(fields: [agentId], references: [id], onDelete: NoAction)
 
-  // Indexes compostos para MongoDB
+  // Relação N:M via tabela de junção explícita (Postgres)
+  instances TriggerRuleInstance[]
+
   @@index([eventType, active])
   @@index([agentId])
+}
+
+// Tabela de junção N:M (TriggerRule <-> Instance)
+model TriggerRuleInstance {
+  triggerRuleId String
+  instanceId    String
+
+  triggerRule TriggerRule @relation(fields: [triggerRuleId], references: [id], onDelete: Cascade)
+  instance    Instance    @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@id([triggerRuleId, instanceId])
 }
 
 enum RoutingStrategy {
@@ -94,16 +102,16 @@ enum EventType {
 // ---------------------------------------------------------
 
 model Integration {
-  id          String   @id @default(uuid()) @map("_id")
+  id          String    @id @default(cuid())
   provider    Provider
   webhookUrl  String?
-  credentials Json?    
-  active      Boolean  @default(true)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  credentials Json?
+  active      Boolean   @default(true)
 
-  orders      Order[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
 }
 
 enum Provider {
@@ -115,21 +123,20 @@ enum Provider {
 }
 
 model Order {
-  id              String   @id @default(uuid()) @map("_id")
+  id              String      @id @default(cuid())
   externalOrderId String
   customerName    String
   customerPhone   String
   amount          Float
   status          OrderStatus
-  payload         Json     
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  payload         Json
 
-  integrationId   String
-  integration     Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // O Mongo Atlas Index Manager cuidará desse Constraint
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
   @@unique([integrationId, externalOrderId])
   @@index([externalOrderId])
   @@index([status])
@@ -148,15 +155,15 @@ enum OrderStatus {
 // ---------------------------------------------------------
 
 model AIAgent {
-  id            String   @id @default(uuid()) @map("_id")
-  name          String
-  systemPrompt  String   // MongoDB não precisa de @db.Text, String suporta gigabytes
-  temperature   Float    @default(0.7)
-  provider      AIProvider @default(OPENAI)
-  isActive      Boolean  @default(true)
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String     @id @default(cuid())
+  name         String
+  systemPrompt String     @db.Text
+  temperature  Float      @default(0.7)
+  provider     AIProvider @default(OPENAI)
+  isActive     Boolean    @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   knowledgeBases AIKnowledgeBase[]
   triggerRules   TriggerRule[]
@@ -169,15 +176,15 @@ enum AIProvider {
 }
 
 model AIKnowledgeBase {
-  id        String   @id @default(uuid()) @map("_id")
-  title     String
-  content   String   
-  
+  id      String @id @default(cuid())
+  title   String
+  content String @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  agentId   String
-  agent     AIAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agentId String
+  agent   AIAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([agentId])
 }

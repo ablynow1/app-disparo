@@ -15,15 +15,26 @@ const ruleSchema = z.object({
 });
 
 export async function getRulesData() {
-  const [rules, instances, agents] = await Promise.all([
+  const [rawRules, instances, agents] = await Promise.all([
     prisma.triggerRule.findMany({
-      include: { instances: true, agent: true },
+      include: {
+        instances: {
+          include: { instance: true }  // TriggerRuleInstance -> Instance
+        },
+        agent: true
+      },
       orderBy: { createdAt: 'desc' }
     }),
-    prisma.instance.findMany({ where: { status: 'open' } }), // Só traz Zaps ativos pra vincular
-    prisma.aIAgent.findMany({ where: { isActive: true } })   // Só IAs ligadas
+    prisma.instance.findMany({ where: { status: 'open' } }),
+    prisma.aIAgent.findMany({ where: { isActive: true } })
   ]);
-  
+
+  // Normaliza para o formato esperado pelo RulesClient (instances flat, não aninhados)
+  const rules = rawRules.map(r => ({
+    ...r,
+    instances: r.instances.map((ri: any) => ri.instance)
+  }));
+
   return { rules, instances, agents };
 }
 
@@ -35,14 +46,15 @@ export async function createOrUpdateRule(formData: FormData, ruleId?: string) {
       routingStrategy: formData.get('routingStrategy'),
       delayMinutes: formData.get('delayMinutes'),
       active: formData.get('active') === 'on' || formData.get('active') === 'true',
-      instanceIds: formData.getAll('instanceIds'), // AQUI A MÁGICA N:N - O front passa múltiplos checkboxes
+      instanceIds: formData.getAll('instanceIds'),
       agentId: formData.get('agentId') || null,
     };
 
     const parsed = ruleSchema.parse(data);
 
     if (ruleId) {
-      // Update DB com disconnect de todos os relations velhos e Connect Nos novos
+      // Update: deleta relações antigas e cria novas via tabela de junção (Postgres)
+      await (prisma as any).triggerRuleInstance.deleteMany({ where: { triggerRuleId: ruleId } });
       await prisma.triggerRule.update({
         where: { id: ruleId },
         data: {
@@ -53,13 +65,12 @@ export async function createOrUpdateRule(formData: FormData, ruleId?: string) {
           active: parsed.active,
           agentId: parsed.agentId,
           instances: {
-             set: [], // Reseta as antigas
-             connect: parsed.instanceIds.map(id => ({ id })) // Linka as novas 100% RoundRobin
+            create: parsed.instanceIds.map(instanceId => ({ instanceId }))
           }
         }
       });
     } else {
-      // Create DB c/ as instâncias conectadas
+      // Create com instâncias via tabela de junção
       await prisma.triggerRule.create({
         data: {
           name: parsed.name,
@@ -69,7 +80,7 @@ export async function createOrUpdateRule(formData: FormData, ruleId?: string) {
           active: parsed.active,
           agentId: parsed.agentId,
           instances: {
-            connect: parsed.instanceIds.map(id => ({ id }))
+            create: parsed.instanceIds.map(instanceId => ({ instanceId }))
           }
         }
       });
@@ -77,7 +88,7 @@ export async function createOrUpdateRule(formData: FormData, ruleId?: string) {
 
     revalidatePath('/dashboard/rules');
     // @ts-ignore: Bug da lib de types do next/cache nesta versão pedindo 2 parametros
-    revalidateTag('disparos-metrics'); // Invalidação Cirúrgica do Cache do Header Front-end Dashboard
+    revalidateTag('disparos-metrics');
     return { success: true };
   } catch (error: any) {
     console.error('SERVER ACTION ERROR:', error);
@@ -89,7 +100,7 @@ export async function toggleRuleActive(id: string, active: boolean) {
   await prisma.triggerRule.update({ where: { id }, data: { active } });
   revalidatePath('/dashboard/rules');
   // @ts-ignore
-  revalidateTag('disparos-metrics'); 
+  revalidateTag('disparos-metrics');
 }
 
 export async function deleteRule(id: string) {

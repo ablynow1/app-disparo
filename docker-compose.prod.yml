@@ -75,7 +75,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3333
-      - DATABASE_URL=${DATABASE_URL}
+      # PostgreSQL interno (sem mais DNS SRV do MongoDB Atlas)
+      - DATABASE_URL=postgresql://postgres:${REDIS_PASS:-super_senha_redis}@postgres:5432/appdisparo
       - REDIS_URL=redis://:${REDIS_PASS:-super_senha_redis}@redis:6379
       - EVOLUTION_API_URL=http://evolution_api:8080
       - EVOLUTION_API_KEY=${EVO_KEY:-evolution_global_key}
@@ -84,13 +85,7 @@ services:
       - app_network
     depends_on:
       - redis
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    # Desativa o sufixo .compute.internal da VPC da AWS que quebra SRV do MongoDB Atlas
-    dns_search:
-      - "."
-    # Liberado pra uso bypass direto no IP :3333
+      - postgres
     labels:
       - "traefik.enable=false"
 
@@ -103,21 +98,17 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: supersaas_web
     restart: always
-    # Porta EXPOSTA à força no DOCKER HOST. (O Cliente acessa IP:3000 direto sem Traefik)
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=http://3.144.26.191:3333
-      - DATABASE_URL=${DATABASE_URL}
+      # PostgreSQL interno (sem mais DNS SRV do MongoDB Atlas)
+      - DATABASE_URL=postgresql://postgres:${REDIS_PASS:-super_senha_redis}@postgres:5432/appdisparo
     networks:
       - app_network
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    # Desativa o sufixo .compute.internal da VPC da AWS que quebra SRV do MongoDB Atlas
-    dns_search:
-      - "."
+    depends_on:
+      - postgres
     labels:
       - "traefik.enable=false"
 

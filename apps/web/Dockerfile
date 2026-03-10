@@ -72,4 +72,6 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["pnpm", "--filter", "web", "start"]
+# Garante que o schema PostgreSQL exista antes de iniciar (idempotente)
+CMD ["sh", "-c", "pnpm --filter @app-disparo/database run db:push --accept-data-loss 2>/dev/null || true && pnpm --filter web start"]
+
