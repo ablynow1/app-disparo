@@ -14,73 +14,80 @@ class EcommerceWebhookController {
         let standardOrder;
         // Agora o Integration ID obrigatoriamente vem mapeado da URL blindada
         let integrationId = params.integrationId;
-        // 1. ADAPTERS (Tradução e Mapeamento)
-        try {
-            if (path.includes('yampi')) {
-                standardOrder = (0, yampi_adapter_1.normalizeYampiPayload)(request.body);
-            }
-            else if (path.includes('shopify')) {
-                standardOrder = (0, shopify_adapter_1.normalizeShopifyPayload)(request.body);
-            }
-            else if (path.includes('appmax')) {
-                standardOrder = (0, appmax_adapter_1.normalizeAppmaxPayload)(request.body);
-            }
-            else {
-                return reply.status(400).send({ error: 'Provedor desconhecido' });
-            }
+        let integrationDetails = request.integrationDetails;
+        let storeId = integrationDetails?.storeId;
+        if (!storeId) {
+            request.log.warn(`Webhook bloqueado: Integração ${integrationId} não tem loja vinculada.`);
+            return reply.status(400).send({ error: 'Integração órfã' });
         }
-        catch (err) {
-            request.log.error(err, 'Falha ao normalizar Webhook (Adapter Error)');
-            return reply.status(400).send({ error: 'Payload Invalido' });
-        }
-        // Se a plataforma enviou lixo sem ID, não prossegue
-        if (!standardOrder.externalOrderId || standardOrder.externalOrderId === 'undefined') {
-            return reply.status(200).send({ message: 'Ignorado (Sem ID no Pedido)' });
-        }
-        // 2. PERSISTÊNCIA IDEMPOTENTE NATIVA (PRISMA UNIQUE INDEX)
-        try {
-            // Usa .upsert() em vez de .create(). Se uma plataforma mandar o mesmo evento do mesmo pedido 200x,
-            // essa query irá apenas atualizar silenciosamente ao invés de explodir o banco.
-            const order = await database_1.prisma.order.upsert({
-                where: {
-                    integrationId_externalOrderId: {
-                        integrationId: integrationId,
-                        externalOrderId: standardOrder.externalOrderId
-                    }
-                },
-                update: {
-                    status: standardOrder.status,
-                    payload: standardOrder.originalPayload,
-                },
-                create: {
-                    externalOrderId: standardOrder.externalOrderId,
-                    customerName: standardOrder.customerName,
-                    customerPhone: standardOrder.customerPhone,
-                    amount: standardOrder.totalAmount,
-                    status: standardOrder.status,
-                    payload: standardOrder.originalPayload,
-                    integrationId: integrationId
+        // 1. FAST ATOMIC RESPONSE (Fire and Forget)
+        // Devolvemos 200 OK no milissegundo 0 para o E-commerce!
+        reply.status(200).send({
+            received: true,
+            status: 'processing_in_background'
+        });
+        // 2. DELEGAÇÃO BACKGROUND (Sem prender a request)
+        // Emcapsulado em uma IIFE assíncrona para pegar erros sem derrubar o processo
+        (async () => {
+            try {
+                let standardOrder;
+                // 2.1 ADAPTERS (Tradução e Mapeamento)
+                const platform = params.platform;
+                if (platform === 'yampi') {
+                    standardOrder = (0, yampi_adapter_1.normalizeYampiPayload)(request.body);
                 }
-            });
-            // 3. BULLMQ DELEGAÇÃO: Entrega pesada para workers em background
-            await OrderRoutingQueue_1.orderRoutingQueue.add('process-ecom-rule', {
-                orderId: order.id,
-                standardOrder
-            }, {
-                jobId: `ecom-${standardOrder.integrationProvider}-${standardOrder.externalOrderId}-${order.status}` // Evita reprocessar na mesma fila
-            });
-            // 4. ESTATÍSTICA IMEDIATA: Fastify solta 200 e finaliza TCP Handshake o mais rápido possível!
-            return reply.status(200).send({
-                received: true,
-                orderId: order.id,
-                normalizedStatus: standardOrder.status
-            });
-        }
-        catch (error) {
-            request.log.error(error, `[Webhook Error - ${standardOrder.integrationProvider}] Fallback.`);
-            // Retorna 500 rápido para que a plataforma ative os retries nativos deles.
-            return reply.status(500).send({ error: 'Internal Server Error' });
-        }
+                else if (platform === 'shopify') {
+                    standardOrder = (0, shopify_adapter_1.normalizeShopifyPayload)(request.body);
+                }
+                else if (platform === 'appmax') {
+                    standardOrder = (0, appmax_adapter_1.normalizeAppmaxPayload)(request.body);
+                }
+                else {
+                    request.log.warn(`Webhook Error: Provedor desconhecido [${platform}]`);
+                    return;
+                }
+                // Se a plataforma enviou lixo sem ID, não prossegue
+                if (!standardOrder.externalOrderId || standardOrder.externalOrderId === 'undefined') {
+                    request.log.info({ msg: 'Webhook Ignorado (Sem ID no Pedido)', standardOrder });
+                    return;
+                }
+                // 2.2 PERSISTÊNCIA IDEMPOTENTE
+                const order = await database_1.prisma.order.upsert({
+                    where: {
+                        integrationId_externalOrderId: {
+                            integrationId: integrationId,
+                            externalOrderId: standardOrder.externalOrderId
+                        }
+                    },
+                    update: {
+                        status: standardOrder.status,
+                        payload: standardOrder.originalPayload,
+                    },
+                    create: {
+                        externalOrderId: standardOrder.externalOrderId,
+                        customerName: standardOrder.customerName,
+                        customerPhone: standardOrder.customerPhone,
+                        amount: standardOrder.totalAmount,
+                        status: standardOrder.status,
+                        payload: standardOrder.originalPayload,
+                        integrationId: integrationId
+                    }
+                });
+                // 2.3 BULLMQ DELEGAÇÃO PROFUNDA
+                await OrderRoutingQueue_1.orderRoutingQueue.add('process-ecom-rule', {
+                    orderId: order.id,
+                    standardOrder,
+                    storeId
+                }, {
+                    jobId: `ecom-${standardOrder.integrationProvider}-${standardOrder.externalOrderId}-${order.status}`
+                });
+                request.log.info(`[Background Webhook] Order ${order.id} processada silenciosamente e enfileirada no Redis.`);
+            }
+            catch (backgroundErr) {
+                // Apenas logamos, pois a resposta 200 já foi enviada
+                request.log.error(backgroundErr, `[Background Webhook Error - Fatal] Falha ao processar Order.`);
+            }
+        })();
     }
 }
 exports.EcommerceWebhookController = EcommerceWebhookController;

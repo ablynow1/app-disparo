@@ -10,8 +10,8 @@ const AIService_1 = require("../../application/services/AIService");
 const EvolutionOutboundQueue_1 = require("./EvolutionOutboundQueue");
 const routingService = new RoutingService_1.RoutingService();
 exports.orderRoutingWorker = new bullmq_1.Worker('order-routing-queue', async (job) => {
-    const { orderId, standardOrder } = job.data;
-    pino_1.logger.info(`[OrderWorker] Orquestrando Regra para o Pedido DB interno ID: ${orderId}`);
+    const { orderId, standardOrder, storeId } = job.data;
+    pino_1.logger.info(`[OrderWorker] Orquestrando Regra para o Pedido DB interno ID: ${orderId} (Store: ${storeId})`);
     // 1. MAPEIA QUAL EVENTO É ESSE (Atenção: MVP Mock. Usar STATUS)
     let triggeredEvent;
     if (standardOrder.status === 'PENDING')
@@ -20,9 +20,17 @@ exports.orderRoutingWorker = new bullmq_1.Worker('order-routing-queue', async (j
         triggeredEvent = 'ORDER_PAID';
     else
         triggeredEvent = 'ORDER_CANCELED'; // Fallback / Canceled
+    // 1.5 ALGORITMO DE AUTO-DESTRUIÇÃO DE SPAM (Gargalo 4)
+    // Se o cliente PAGOU o pedido agora, nós limpamos na fila qualquer cobrança pendente 
+    // de PIX ou Carrinho que esteja aguardando no delay para não incomodá-lo.
+    if (triggeredEvent === 'ORDER_PAID') {
+        pino_1.logger.info(`[OrderWorker] Cliente pagou o Pedido ${orderId}. Cancelando cobranças pendentes na Fila...`);
+        await EvolutionOutboundQueue_1.evolutionOutboundQueue.remove(`trigger-${orderId}-PIX_PENDING`);
+        await EvolutionOutboundQueue_1.evolutionOutboundQueue.remove(`trigger-${orderId}-ABANDONED_CART`);
+    }
     // 2. BUSCA A REGRA DO USUÁRIO E SUAS INSTÂNCIAS (Relação N:N e Roteamento)
     const activeRule = await database_1.prisma.triggerRule.findFirst({
-        where: { eventType: triggeredEvent, active: true },
+        where: { eventType: triggeredEvent, active: true, storeId },
         include: { instances: true } // Inner Join mágico Prisma puxa os telefones
     });
     if (!activeRule) {
@@ -30,10 +38,11 @@ exports.orderRoutingWorker = new bullmq_1.Worker('order-routing-queue', async (j
         return; // Finaliza graciosamente "Pulando" o pedido
     }
     // 3. SE NÃO TEM WHATSAPP ATRELADO OU CONECTADO
-    // Em produção o status deve ser verificado. Provê um fallback na Queue
-    const connectedJids = activeRule.instances.map((i) => i.remoteJid).filter(Boolean);
+    // A Redundância Ocorre Aqui: Filtramos apenas os pareados que estão 'open' no Banco!
+    const activeInstances = activeRule.instances.filter((i) => i.status === 'open');
+    const connectedJids = activeInstances.map((i) => i.remoteJid).filter(Boolean);
     if (connectedJids.length === 0) {
-        throw new Error(`DELAY_RETRY: Regra [${activeRule.name}] está ativa mas não tem Nenhuma Instância conectada! Aguardando retry na fila...`);
+        throw new Error(`DELAY_RETRY: Regra [${activeRule.name}] está ativa mas não tem Nenhuma Instância conectada e 'open'! Aguardando retry na fila (Gargalo 2 Redundância)...`);
     }
     // 4. CHAMA O MOTOR ATÔMICO ROUND ROBIN (Redis INCR) PRA EVITAR BLOQUEIO
     const nextWhatsappInstance = await routingService.getNextInstance(activeRule.id, connectedJids);
@@ -62,13 +71,18 @@ exports.orderRoutingWorker = new bullmq_1.Worker('order-routing-queue', async (j
             .replace('{telefone}', standardOrder.customerPhone);
     }
     // 6. ENFILEIRA PRA ÚLTIMA ETAPA (O CANHÃO OUTBOUND REAL DE API)
+    // Adicionamos o Delay Nativo do Redis (Em Minutos convertidos p/ ms)
+    const delayInMs = activeRule.delayMinutes * 60 * 1000;
     await EvolutionOutboundQueue_1.evolutionOutboundQueue.add(`send-whatsapp-${orderId}`, {
         instanceJid: nextWhatsappInstance,
         phoneDestination: standardOrder.customerPhone,
         text: finalMessage,
         orderId: orderId
+    }, {
+        jobId: `trigger-${orderId}-${triggeredEvent}`, // ID Fixo para permitir auto-cancelamento
+        delay: delayInMs > 0 ? delayInMs : undefined
     });
-    pino_1.logger.info(`[OrderWorker] ✅ Pedido Orquestrado com sucesso. A regra disparará magicamente pela Instância: ${nextWhatsappInstance}`);
+    pino_1.logger.info(`[OrderWorker] ✅ Pedido Orquestrado com sucesso. A regra disparará magicamente pela Instância: ${nextWhatsappInstance} em ${activeRule.delayMinutes} minutos.`);
 }, {
     connection: redis_1.sharedRedisConnection,
     concurrency: 50

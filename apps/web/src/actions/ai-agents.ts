@@ -2,6 +2,7 @@
 
 import { prisma } from '@app-disparo/database';
 import { revalidatePath } from 'next/cache';
+import { getActiveStoreId } from '@/lib/store';
 import { z } from 'zod';
 
 const agentSchema = z.object({
@@ -10,11 +11,11 @@ const agentSchema = z.object({
   isActive: z.boolean().default(true),
   temperature: z.coerce.number().min(0).max(1),
   systemPrompt: z.string().min(10, 'Prompt muito curto. Dê instruções mais claras pro Robô.'),
-  
+
   // O array dinâmico N:N do RAG Base Conhecimento
   knowledgeBases: z.array(z.object({
-     title: z.string().min(2),
-     content: z.string().min(5),
+    title: z.string().min(2),
+    content: z.string().min(5),
   })).optional().default([]),
 });
 
@@ -22,7 +23,9 @@ const agentSchema = z.object({
  * Retorna todos os Agentes Inteligentes com os Bancos RAG Populados 
  */
 export async function getAiAgents() {
+  const storeId = await getActiveStoreId();
   return prisma.aIAgent.findMany({
+    where: { storeId },
     include: {
       knowledgeBases: true,
       _count: {
@@ -40,11 +43,12 @@ export async function getAiAgents() {
 export async function saveAiAgent(formDataRaw: any, agentId?: string) {
   try {
     const parsed = agentSchema.parse(formDataRaw);
+    const storeId = await getActiveStoreId();
 
     if (agentId) {
       // UPDATE c/ recriação da Árvore O:N (flush mental do RAG antigo)
       await prisma.aIAgent.update({
-        where: { id: agentId },
+        where: { id: agentId, storeId },
         data: {
           name: parsed.name,
           provider: parsed.provider,
@@ -52,11 +56,11 @@ export async function saveAiAgent(formDataRaw: any, agentId?: string) {
           isActive: parsed.isActive,
           systemPrompt: parsed.systemPrompt,
           knowledgeBases: {
-             deleteMany: {}, // Obliterar cérebros de treinamento antigos
-             create: parsed.knowledgeBases.map(kb => ({
-                title: kb.title,
-                content: kb.content
-             }))
+            deleteMany: {}, // Obliterar cérebros de treinamento antigos
+            create: parsed.knowledgeBases.map(kb => ({
+              title: kb.title,
+              content: kb.content
+            }))
           }
         }
       });
@@ -64,16 +68,17 @@ export async function saveAiAgent(formDataRaw: any, agentId?: string) {
       // CREATE
       await prisma.aIAgent.create({
         data: {
+          storeId,
           name: parsed.name,
           provider: parsed.provider,
           temperature: parsed.temperature,
           isActive: parsed.isActive,
           systemPrompt: parsed.systemPrompt,
           knowledgeBases: {
-             create: parsed.knowledgeBases.map(kb => ({
-                title: kb.title,
-                content: kb.content
-             }))
+            create: parsed.knowledgeBases.map(kb => ({
+              title: kb.title,
+              content: kb.content
+            }))
           }
         }
       });
@@ -93,22 +98,23 @@ export async function saveAiAgent(formDataRaw: any, agentId?: string) {
 
 export async function deleteAiAgent(id: string) {
   try {
-    // Delete CASCADE vai apagar as knowledgeBases automaticamente pelo Prisma!
-    await prisma.aIAgent.delete({ where: { id } });
+    const storeId = await getActiveStoreId();
+    await prisma.aIAgent.deleteMany({ where: { id, storeId } });
     revalidatePath('/dashboard/ai-agents');
     revalidatePath('/dashboard/rules');
     return { success: true };
-  } catch(e: any) {
-     return { success: false, error: 'Falha ao Deletar o Cérebro' };
+  } catch (e: any) {
+    return { success: false, error: 'Falha ao Deletar o Cérebro' };
   }
 }
 
 export async function toggleAiAgentAuth(id: string, active: boolean) {
   try {
-     await prisma.aIAgent.update({ where: { id }, data: { isActive: active } });
-     revalidatePath('/dashboard/ai-agents');
-     return { success: true };
-  } catch(e: any) {
-     return { success: false };
+    const storeId = await getActiveStoreId();
+    await prisma.aIAgent.updateMany({ where: { id, storeId }, data: { isActive: active } });
+    revalidatePath('/dashboard/ai-agents');
+    return { success: true };
+  } catch (e: any) {
+    return { success: false };
   }
 }

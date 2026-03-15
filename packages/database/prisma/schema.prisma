@@ -8,81 +8,175 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------------------------------------------------------
-// MÓDULO CORE: CONTATOS E MENSAGERIA TIMELINE
-// ---------------------------------------------------------
+model Store {
+  id           String        @id @default(cuid())
+  name         String
+  slug         String        @unique
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  ownerId      String?
+  aiAgents     AIAgent[]
+  instances    Instance[]
+  integrations Integration[]
+  contacts     Contact[]
+  owner        User?         @relation(fields: [ownerId], references: [id])
+  triggerRules TriggerRule[]
 
-model Contact {
+  @@index([ownerId])
+}
+
+model User {
   id        String   @id @default(cuid())
-  remoteJid String   @unique
-  pushName  String?
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(STORE_OWNER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  stores    Store[]
+}
 
+model Contact {
+  id        String            @id @default(cuid())
+  remoteJid String            @unique
+  pushName  String?
+  aiPaused  Boolean           @default(false)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  storeId   String?
+  store     Store?            @relation(fields: [storeId], references: [id])
   messages  ConversationLog[]
+
+  @@index([storeId])
 }
 
 model ConversationLog {
   id        String    @id @default(cuid())
-  text      String    @db.Text
+  text      String
   direction Direction
   createdAt DateTime  @default(now())
-
   contactId String
-  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contact   Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+}
+
+model Instance {
+  id           String                @id @default(cuid())
+  name         String
+  remoteJid    String?               @unique
+  status       String?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  storeId      String?
+  agentId      String?
+  agent        AIAgent?              @relation(fields: [agentId], references: [id])
+  store        Store?                @relation(fields: [storeId], references: [id])
+  triggerRules TriggerRuleInstance[]
+
+  @@index([storeId])
+  @@index([agentId])
+}
+
+model TriggerRule {
+  id              String                @id @default(cuid())
+  name            String
+  eventType       EventType
+  routingStrategy RoutingStrategy       @default(ROUND_ROBIN)
+  delayMinutes    Int                   @default(10)
+  active          Boolean               @default(true)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  storeId         String?
+  agentId         String?
+  agent           AIAgent?              @relation(fields: [agentId], references: [id], onDelete: NoAction)
+  store           Store?                @relation(fields: [storeId], references: [id])
+  instances       TriggerRuleInstance[]
+
+  @@index([eventType, active])
+  @@index([agentId])
+  @@index([storeId])
+}
+
+model TriggerRuleInstance {
+  triggerRuleId String
+  instanceId    String
+  instance      Instance    @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  triggerRule   TriggerRule @relation(fields: [triggerRuleId], references: [id], onDelete: Cascade)
+
+  @@id([triggerRuleId, instanceId])
+}
+
+model Integration {
+  id          String   @id @default(cuid())
+  provider    Provider
+  webhookUrl  String?
+  credentials Json?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  storeId     String?
+  store       Store?   @relation(fields: [storeId], references: [id])
+  orders      Order[]
+
+  @@index([storeId])
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  externalOrderId String
+  customerName    String
+  customerPhone   String
+  amount          Float
+  status          OrderStatus
+  payload         Json
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  integrationId   String
+  integration     Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@unique([integrationId, externalOrderId])
+  @@index([externalOrderId])
+  @@index([status])
+  @@index([customerPhone])
+}
+
+model AIAgent {
+  id             String            @id @default(cuid())
+  name           String
+  systemPrompt   String
+  temperature    Float             @default(0.7)
+  provider       AIProvider        @default(OPENAI)
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  storeId        String?
+  store          Store?            @relation(fields: [storeId], references: [id])
+  knowledgeBases AIKnowledgeBase[]
+  instances      Instance[]
+  triggerRules   TriggerRule[]
+
+  @@index([storeId])
+}
+
+model AIKnowledgeBase {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  agentId   String
+  agent     AIAgent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+}
+
+enum Role {
+  SUPERADMIN
+  STORE_OWNER
 }
 
 enum Direction {
   INBOUND
   OUTBOUND
-}
-
-// ---------------------------------------------------------
-// MÓDULO 1: ROTEAMENTO MULTI-INSTÂNCIA E GATILHOS
-// ---------------------------------------------------------
-
-model Instance {
-  id          String   @id @default(cuid())
-  name        String
-  remoteJid   String?  @unique
-  status      String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relação N:M via tabela de junção explícita (Postgres)
-  triggerRules TriggerRuleInstance[]
-}
-
-model TriggerRule {
-  id              String          @id @default(cuid())
-  name            String
-  eventType       EventType
-  routingStrategy RoutingStrategy @default(ROUND_ROBIN)
-  delayMinutes    Int             @default(10)
-  active          Boolean         @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  agentId String?
-  agent   AIAgent? @relation(fields: [agentId], references: [id], onDelete: NoAction)
-
-  // Relação N:M via tabela de junção explícita (Postgres)
-  instances TriggerRuleInstance[]
-
-  @@index([eventType, active])
-  @@index([agentId])
-}
-
-// Tabela de junção N:M (TriggerRule <-> Instance)
-model TriggerRuleInstance {
-  triggerRuleId String
-  instanceId    String
-
-  triggerRule TriggerRule @relation(fields: [triggerRuleId], references: [id], onDelete: Cascade)
-  instance    Instance    @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-
-  @@id([triggerRuleId, instanceId])
 }
 
 enum RoutingStrategy {
@@ -97,50 +191,12 @@ enum EventType {
   ORDER_CANCELED
 }
 
-// ---------------------------------------------------------
-// MÓDULO 2: INTEGRAÇÕES E-COMMERCE & PEDIDOS IDEMPOTENTES
-// ---------------------------------------------------------
-
-model Integration {
-  id          String    @id @default(cuid())
-  provider    Provider
-  webhookUrl  String?
-  credentials Json?
-  active      Boolean   @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  orders Order[]
-}
-
 enum Provider {
   SHOPIFY
   YAMPI
   APPMAX
   HOTMART
   KIWIFY
-}
-
-model Order {
-  id              String      @id @default(cuid())
-  externalOrderId String
-  customerName    String
-  customerPhone   String
-  amount          Float
-  status          OrderStatus
-  payload         Json
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  integrationId String
-  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
-
-  @@unique([integrationId, externalOrderId])
-  @@index([externalOrderId])
-  @@index([status])
-  @@index([customerPhone])
 }
 
 enum OrderStatus {
@@ -150,41 +206,8 @@ enum OrderStatus {
   FAILED_TO_SEND
 }
 
-// ---------------------------------------------------------
-// MÓDULO 3: CÉREBRO DE INTELIGÊNCIA ARTIFICIAL (BASE RAG)
-// ---------------------------------------------------------
-
-model AIAgent {
-  id           String     @id @default(cuid())
-  name         String
-  systemPrompt String     @db.Text
-  temperature  Float      @default(0.7)
-  provider     AIProvider @default(OPENAI)
-  isActive     Boolean    @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  knowledgeBases AIKnowledgeBase[]
-  triggerRules   TriggerRule[]
-}
-
 enum AIProvider {
   OPENAI
   ANTHROPIC
   GOOGLE_VERTEX
-}
-
-model AIKnowledgeBase {
-  id      String @id @default(cuid())
-  title   String
-  content String @db.Text
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  agentId String
-  agent   AIAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
-
-  @@index([agentId])
 }

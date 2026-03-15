@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.EvolutionMessageSchema = void 0;
+exports.EvolutionConnectionSchema = exports.EvolutionMessageSchema = void 0;
 const zod_1 = require("zod");
 // Zod Schema to validate Evolution API's messages.upsert payload
 exports.EvolutionMessageSchema = zod_1.z.object({
@@ -24,3 +24,11 @@ exports.EvolutionMessageSchema = zod_1.z.object({
         messageType: zod_1.z.string().optional(),
     }).strict(),
 }).strict();
+exports.EvolutionConnectionSchema = zod_1.z.object({
+    event: zod_1.z.literal('connection.update'),
+    instance: zod_1.z.string(),
+    data: zod_1.z.object({
+        state: zod_1.z.enum(['open', 'close', 'connecting', 'refused']).optional(), // states usually returned by bailey
+        statusReason: zod_1.z.number().optional(),
+    }).passthrough(),
+}).passthrough();

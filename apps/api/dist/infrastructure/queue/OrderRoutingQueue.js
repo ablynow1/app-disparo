@@ -11,7 +11,13 @@ exports.orderRoutingQueue = new bullmq_1.Queue('order-routing-queue', {
             type: 'exponential',
             delay: 5000 // Tenta em 5s, depois 25s, 125s (2min)...
         },
-        removeOnComplete: true, // Auto-Limpante pra não lotar a RAM
-        removeOnFail: false // Deixa visível pra debug em DLQ
+        removeOnComplete: {
+            age: 24 * 3600, // Mantém sucessos na RAM por 24 horas apenas (para métricas)
+            count: 1000, // Mas apaga se passar de 1.000 sucessos acumulados num mesmo dia
+        },
+        removeOnFail: {
+            age: 7 * 24 * 3600, // Segura falhas por no máximo 7 dias para debugar
+            count: 5000 // Ou deleta se a fila de Erros passar de 5.000 de volume
+        }
     }
 });

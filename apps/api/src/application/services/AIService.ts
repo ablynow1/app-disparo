@@ -42,19 +42,57 @@ Escreva APENAS O TEXTO da mensagem final pura que será disparada pro WhatsApp d
 
     // 4. CHAMADA GERADORA OTIMIZADA PARA FAST-RESPONSE
     try {
-        const result = await model.generateContent({
-           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-           systemInstruction: superSystemPrompt,
-           generationConfig: {
-             temperature: agent.temperature,
-           }
-        });
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+        systemInstruction: superSystemPrompt,
+        generationConfig: {
+          temperature: agent.temperature,
+        }
+      });
 
-        const response = result.response;
-        return response.text() || '[Erro na geração textual]';
+      const response = result.response;
+      return response.text() || '[Erro na geração textual]';
     } catch (error: any) {
-        logger.error({ err: error.message }, '[AIService] Falha bruta na comunicação com a API do Google Gemini');
-        throw error; // Re-lança pro OrderRoutingWorker tratar o fallback
+      logger.error({ err: error.message }, '[AIService] Falha bruta na comunicação com a API do Google Gemini');
+      throw error; // Re-lança pro OrderRoutingWorker tratar o fallback
+    }
+  }
+  async generateInboundResponse(agentId: string, currentMessage: string, history: any[]): Promise<string> {
+    const agent = await prisma.aIAgent.findUnique({
+      where: { id: agentId },
+      include: { knowledgeBases: true }
+    });
+
+    if (!agent) throw new Error('Agente Inbound Retornado Nulo na Base');
+
+    const model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const ragContext = agent.knowledgeBases.length > 0
+      ? `\n\n[Regras e Base de Conhecimento RAG]:\n${agent.knowledgeBases.map((kb: any) => `* ${kb.title}\n${kb.content}`).join('\n\n')}`
+      : '';
+
+    const superSystemPrompt = `${agent.systemPrompt}\n\nVocê está conversando no WhatsApp com um lead da minha loja. Responda de forma natural, curtas e precisas.\n${ragContext}`;
+
+    // Mapeia histórico limitando a quantidade pra não estourar tokens
+    const chatHistory = history.map(msg => ({
+      role: msg.direction === 'INBOUND' ? 'user' : 'model',
+      parts: [{ text: msg.text }]
+    }));
+
+    try {
+      const chat = model.startChat({
+        history: chatHistory,
+        systemInstruction: superSystemPrompt,
+        generationConfig: {
+          temperature: agent.temperature,
+        }
+      });
+
+      const result = await chat.sendMessage(currentMessage);
+      return result.response.text();
+    } catch (error: any) {
+      logger.error({ err: error.message }, '[AIService] Falha na geração inbound da Gemini API');
+      throw error;
     }
   }
 }

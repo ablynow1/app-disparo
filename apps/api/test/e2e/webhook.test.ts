@@ -22,18 +22,18 @@ describe('🚀 E2E: Fluxo de Pedidos Shopify -> Motor RAG BullMQ', () => {
       total_price: "99.00",
       customer: { first_name: "Lojista", phone: "551199999999" }
     };
-    
+
     // Convertendo o server.server (Instância real do Node/HTTP gerada pelo Fastify)
     const response = await request(app.server)
       .post('/api/webhooks/shopify')
-      .set('x-shopify-hmac-sha256', 'hash-falso-cibernetico') 
+      .set('x-shopify-hmac-sha256', 'hash-falso-cibernetico')
       .send(fakePayload);
 
     expect(response.status).toBe(400); // Bad Request (HMAC Missing/Invalid)
   });
 
   it('🟢 Deve processar Pedido Local Limpo e Orquestrar o Serviço (Skip Hash Check Mode)', async () => {
-    
+
     const fakeOrder = {
       id: "E2E-1234",
       customerName: "QA Tester",
@@ -69,18 +69,16 @@ describe('🚀 E2E: Fluxo de Pedidos Shopify -> Motor RAG BullMQ', () => {
     });
 
     // 2. Simula o Envio pra Fila (BullMQ)
-    await orderRoutingQueue.add('route-order', {
+    await orderRoutingQueue.add('process-ecom-rule', {
       orderId: fakeOrder.id,
-      event: 'ORDER_PAID',
-      amount: orderData.amount,
-      customerName: orderData.customerName,
-      customerPhone: orderData.customerPhone
+      standardOrder: orderData,
+      storeId: "loja-1"
     });
 
     expect(prisma.order.upsert).toHaveBeenCalledTimes(1);
-    expect(orderRoutingQueue.add).toHaveBeenCalledWith('route-order', expect.objectContaining({
-      event: 'ORDER_PAID',
-      customerName: 'QA Tester'
+    expect(orderRoutingQueue.add).toHaveBeenCalledWith('process-ecom-rule', expect.objectContaining({
+      orderId: fakeOrder.id,
+      storeId: "loja-1"
     }));
   });
 

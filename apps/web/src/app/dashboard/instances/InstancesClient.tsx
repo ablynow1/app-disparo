@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Smartphone, Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, QrCode, X, Loader2, Zap } from 'lucide-react';
-import { createInstance, deleteInstance, getQrCode, syncInstanceStatus, fetchEvoInstances } from '@/actions/instances';
+import { createInstance, deleteInstance, getQrCode, syncInstanceStatus, fetchEvoInstances, updateInstanceAgent } from '@/actions/instances';
 
 interface Instance {
   instanceName: string;
@@ -10,9 +10,11 @@ interface Instance {
   owner?: string;
   profileName?: string;
   profilePictureUrl?: string;
+  agentId?: string | null;
+  agentName?: string | null;
 }
 
-export function InstancesClient({ initialInstances }: { initialInstances: Instance[] }) {
+export function InstancesClient({ initialInstances, availableAgents = [] }: { initialInstances: Instance[], availableAgents?: any[] }) {
   const [instances, setInstances] = useState<Instance[]>(initialInstances);
   const [showModal, setShowModal] = useState(false);
   const [newName, setNewName] = useState('');
@@ -80,6 +82,12 @@ export function InstancesClient({ initialInstances }: { initialInstances: Instan
     await refreshInstances();
   }
 
+  async function handleAgentChange(instanceName: string, agentId: string) {
+    const val = agentId === 'none' ? null : agentId;
+    await updateInstanceAgent(instanceName, val);
+    await refreshInstances();
+  }
+
   return (
     <>
       {/* Header com botão de adicionar */}
@@ -100,7 +108,8 @@ export function InstancesClient({ initialInstances }: { initialInstances: Instan
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {instances.length > 0 ? (
           instances.map((inst, index) => (
-            <div key={index} className="bg-zinc-900/40 backdrop-blur-xl border border-zinc-800/60 p-6 rounded-3xl shadow-sm relative overflow-hidden group flex flex-col">
+            <div key={index} className="bg-white/[0.02] backdrop-blur-3xl border border-white/5 hover:border-white/10 transition-all duration-500 hover:-translate-y-1 p-6 rounded-3xl shadow-2xl relative overflow-hidden group flex flex-col">
+              <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-amber-500/20 to-transparent" />
               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 group-hover:opacity-20 transition-all">
                 <Smartphone size={80} />
               </div>
@@ -136,6 +145,22 @@ export function InstancesClient({ initialInstances }: { initialInstances: Instan
                       <AlertCircle className="w-3.5 h-3.5" /> AGUARDANDO QR
                     </div>
                   )}
+                </div>
+
+                <div className="flex items-center justify-between text-sm bg-zinc-950/50 px-3 py-2 rounded-xl mt-2">
+                  <span className="text-zinc-500 font-medium">Cérebro IA</span>
+                  <select
+                    value={inst.agentId || 'none'}
+                    onChange={(e) => handleAgentChange(inst.instanceName, e.target.value)}
+                    className="bg-zinc-900 border border-zinc-700/50 text-zinc-300 text-xs rounded-lg px-2 py-1 max-w-[140px] truncate focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="none">Desativado</option>
+                    {availableAgents.map((agent: any) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -180,9 +205,10 @@ export function InstancesClient({ initialInstances }: { initialInstances: Instan
 
       {/* Modal: Criar Nova Instância */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 border border-zinc-700/50 rounded-3xl p-8 w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between mb-6">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-background/80 backdrop-blur-3xl border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
+            <div className="flex items-center justify-between mb-6 relative z-10">
               <h2 className="text-xl font-semibold text-zinc-100">Novo Telefone</h2>
               <button onClick={() => setShowModal(false)} className="text-zinc-400 hover:text-zinc-200 transition-colors">
                 <X className="w-5 h-5" />
@@ -225,47 +251,48 @@ export function InstancesClient({ initialInstances }: { initialInstances: Instan
       )}
 
   // Modal: QR Code
-  {qrModal.open && (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-700/50 rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-zinc-100">Escanear QR Code</h2>
-          <button
-            onClick={() => setQrModal(q => ({ ...q, open: false, polling: false }))}
-            className="text-zinc-400 hover:text-zinc-200 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <p className="text-sm text-zinc-400 mb-6">
-          Abra o WhatsApp → <strong className="text-zinc-300">Aparelhos conectados</strong> → <strong className="text-zinc-300">Conectar aparelho</strong> e escaneie o código abaixo.
-        </p>
-
-        <div className="bg-white p-4 rounded-2xl inline-block mb-4">
-          {qrModal.qr ? (
-            <img src={qrModal.qr} alt="QR Code WhatsApp" className="w-52 h-52 object-contain" />
-          ) : (
-            <div className="w-52 h-52 flex flex-col items-center justify-center gap-3">
-              <Loader2 className="w-10 h-10 animate-spin text-zinc-400" />
-              <span className="text-xs text-zinc-400 px-2">Aguardando QR Code da Evolution API...</span>
+      {qrModal.open && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-background/80 backdrop-blur-3xl border border-white/10 rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center relative overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
+            <div className="flex items-center justify-between mb-6 relative z-10">
+              <h2 className="text-xl font-semibold text-zinc-100">Escanear QR Code</h2>
+              <button
+                onClick={() => setQrModal(q => ({ ...q, open: false, polling: false }))}
+                className="text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-          )}
-        </div>
 
-        {qrModal.debugInfo && !qrModal.qr && (
-          <div className="mt-3 bg-zinc-800 rounded-xl p-3 text-left">
-            <p className="text-xs text-amber-400 font-mono mb-1">⚠️ Resposta da Evolution API:</p>
-            <p className="text-xs text-zinc-400 font-mono break-all">{qrModal.debugInfo}</p>
+            <p className="text-sm text-zinc-400 mb-6">
+              Abra o WhatsApp → <strong className="text-zinc-300">Aparelhos conectados</strong> → <strong className="text-zinc-300">Conectar aparelho</strong> e escaneie o código abaixo.
+            </p>
+
+            <div className="bg-white p-4 rounded-2xl inline-block mb-4">
+              {qrModal.qr ? (
+                <img src={qrModal.qr} alt="QR Code WhatsApp" className="w-52 h-52 object-contain" />
+              ) : (
+                <div className="w-52 h-52 flex flex-col items-center justify-center gap-3">
+                  <Loader2 className="w-10 h-10 animate-spin text-zinc-400" />
+                  <span className="text-xs text-zinc-400 px-2">Aguardando QR Code da Evolution API...</span>
+                </div>
+              )}
+            </div>
+
+            {qrModal.debugInfo && !qrModal.qr && (
+              <div className="mt-3 bg-zinc-800 rounded-xl p-3 text-left">
+                <p className="text-xs text-amber-400 font-mono mb-1">⚠️ Resposta da Evolution API:</p>
+                <p className="text-xs text-zinc-400 font-mono break-all">{qrModal.debugInfo}</p>
+              </div>
+            )}
+
+            <p className="text-xs text-zinc-500 flex items-center justify-center gap-1.5 mt-4">
+              <RefreshCw className="w-3 h-3 animate-spin" /> Atualizando automaticamente...
+            </p>
           </div>
-        )}
-
-        <p className="text-xs text-zinc-500 flex items-center justify-center gap-1.5 mt-4">
-          <RefreshCw className="w-3 h-3 animate-spin" /> Atualizando automaticamente...
-        </p>
-      </div>
-    </div>
-  )}
+        </div>
+      )}
     </>
   );
 }

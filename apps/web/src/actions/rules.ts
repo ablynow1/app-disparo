@@ -2,6 +2,7 @@
 
 import { prisma, EventType, RoutingStrategy } from '@app-disparo/database';
 import { revalidatePath, revalidateTag } from 'next/cache';
+import { getActiveStoreId } from '@/lib/store';
 import { z } from 'zod';
 
 const ruleSchema = z.object({
@@ -15,8 +16,10 @@ const ruleSchema = z.object({
 });
 
 export async function getRulesData() {
+  const storeId = await getActiveStoreId();
   const [rawRules, instances, agents] = await Promise.all([
     prisma.triggerRule.findMany({
+      where: { storeId },
       include: {
         instances: {
           include: { instance: true }  // TriggerRuleInstance -> Instance
@@ -25,8 +28,8 @@ export async function getRulesData() {
       },
       orderBy: { createdAt: 'desc' }
     }),
-    prisma.instance.findMany({ where: { status: 'open' } }),
-    prisma.aIAgent.findMany({ where: { isActive: true } })
+    prisma.instance.findMany({ where: { status: 'open', storeId } }),
+    prisma.aIAgent.findMany({ where: { isActive: true, storeId } })
   ]);
 
   // Normaliza para o formato esperado pelo RulesClient (instances flat, não aninhados)
@@ -51,6 +54,7 @@ export async function createOrUpdateRule(formData: FormData, ruleId?: string) {
     };
 
     const parsed = ruleSchema.parse(data);
+    const storeId = await getActiveStoreId();
 
     if (ruleId) {
       // Update: deleta relações antigas e cria novas via tabela de junção (Postgres)
@@ -73,6 +77,7 @@ export async function createOrUpdateRule(formData: FormData, ruleId?: string) {
       // Create com instâncias via tabela de junção
       await prisma.triggerRule.create({
         data: {
+          storeId,
           name: parsed.name,
           eventType: parsed.eventType,
           routingStrategy: parsed.routingStrategy,
@@ -97,14 +102,16 @@ export async function createOrUpdateRule(formData: FormData, ruleId?: string) {
 }
 
 export async function toggleRuleActive(id: string, active: boolean) {
-  await prisma.triggerRule.update({ where: { id }, data: { active } });
+  const storeId = await getActiveStoreId();
+  await prisma.triggerRule.updateMany({ where: { id, storeId }, data: { active } });
   revalidatePath('/dashboard/rules');
   // @ts-ignore
   revalidateTag('disparos-metrics');
 }
 
 export async function deleteRule(id: string) {
-  await prisma.triggerRule.delete({ where: { id } });
+  const storeId = await getActiveStoreId();
+  await prisma.triggerRule.deleteMany({ where: { id, storeId } });
   revalidatePath('/dashboard/rules');
   // @ts-ignore
   revalidateTag('disparos-metrics');

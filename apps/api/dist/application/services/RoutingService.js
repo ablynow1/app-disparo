@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RoutingService = void 0;
 const ioredis_1 = __importDefault(require("ioredis"));
 const env_1 = require("../../infrastructure/env");
+const database_1 = require("@app-disparo/database");
 // Instância dedicada para operações atômicas isoladas das filas
 const redisClient = new ioredis_1.default(env_1.env.REDIS_URL, {
     maxRetriesPerRequest: null,
@@ -23,9 +24,21 @@ class RoutingService {
         if (!instanceJids || instanceJids.length === 0) {
             throw new Error('Nenhuma instância disponível ativa provida para o RoutingService.');
         }
-        if (instanceJids.length === 1) {
-            // Se só tiver um dono, economiza ida ao Redis
-            return instanceJids[0];
+        // SANITY CHECK: Garante que as instâncias providas não foram desativadas por banimento no DB
+        const activeInstancesInDb = await database_1.prisma.instance.findMany({
+            where: {
+                name: { in: instanceJids },
+                status: 'open'
+            },
+            select: { name: true }
+        });
+        const safeJids = activeInstancesInDb.map(i => i.name);
+        if (safeJids.length === 0) {
+            throw new Error(`DELAY_RETRY: Todas as instâncias atreladas à regra [${ruleId}] estão OFFLINE/Desconectadas. O Roteador bloqueou o envio.`);
+        }
+        if (safeJids.length === 1) {
+            // Se só tiver um dono SEGURO, economiza ida ao Redis
+            return safeJids[0];
         }
         // Chave única para o ponteiro daquela regra específica
         const redisKey = `routing:rule:${ruleId}:currentIndex`;

@@ -11,7 +11,13 @@ exports.evolutionOutboundQueue = new bullmq_1.Queue('evolution-outbound-queue', 
             type: 'exponential',
             delay: 5000 // Tenta enviar o webhook pra Evolution em 5s, 25s, 125s (2min)... se falhar
         },
-        removeOnComplete: true,
-        removeOnFail: false
+        removeOnComplete: {
+            age: 24 * 3600,
+            count: 1000,
+        },
+        removeOnFail: {
+            age: 7 * 24 * 3600,
+            count: 5000
+        }
     }
 });

@@ -14,11 +14,10 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      # Redirecionamento forçado desativado no momento para teste de IP na AWS (Sem dominio)
-      # - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
-      # - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.email=admin@seudominio.com.br"
+      - "--certificatesresolvers.letsencrypt.acme.email=admin@${DOMAIN_NAME}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
     ports:
       - "80:80"
@@ -55,7 +54,7 @@ services:
     image: redis:7-alpine
     container_name: supersaas_redis
     restart: unless-stopped
-    command: ["redis-server", "--requirepass", "${REDIS_PASS:-super_senha_redis}"]
+    command: [ "redis-server", "--requirepass", "${REDIS_PASS:-super_senha_redis}" ]
     volumes:
       - redis_data:/data
     networks:
@@ -70,24 +69,26 @@ services:
       dockerfile: apps/api/Dockerfile
     container_name: supersaas_api
     restart: always
-    ports:
-      - "3333:3333"
     environment:
       - NODE_ENV=production
       - PORT=3333
-      # PostgreSQL interno (sem mais DNS SRV do MongoDB Atlas)
       - DATABASE_URL=postgresql://postgres:${REDIS_PASS:-super_senha_redis}@postgres:5432/appdisparo
       - REDIS_URL=redis://:${REDIS_PASS:-super_senha_redis}@redis:6379
       - EVOLUTION_API_URL=http://evolution_api:8080
       - EVOLUTION_API_KEY=${EVO_KEY:-evolution_global_key}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - FRONTEND_URL=https://${DOMAIN_NAME}
     networks:
       - app_network
     depends_on:
       - redis
       - postgres
     labels:
-      - "traefik.enable=false"
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.api.loadbalancer.server.port=3333"
 
   # -----------------------------------------------------------------------------------
   # FRONTEND: AppRouter (Dashboard) Premium Next.js Standalone
@@ -98,14 +99,10 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: supersaas_web
     restart: always
-    ports:
-      - "3000:3000"
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://3.144.26.191:3333
-      # PostgreSQL interno (sem mais DNS SRV do MongoDB Atlas)
+      - NEXT_PUBLIC_API_URL=https://api.${DOMAIN_NAME}
       - DATABASE_URL=postgresql://postgres:${REDIS_PASS:-super_senha_redis}@postgres:5432/appdisparo
-      # Evolution API acessível pelo nome do service interno Docker
       - EVOLUTION_INTERNAL_URL=http://evolution_api:8080
       - EVO_KEY=${EVO_KEY:-evolution_global_key}
     networks:
@@ -113,7 +110,11 @@ services:
     depends_on:
       - postgres
     labels:
-      - "traefik.enable=false"
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=Host(`${DOMAIN_NAME}`)"
+      - "traefik.http.routers.web.entrypoints=websecure"
+      - "traefik.http.routers.web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.web.loadbalancer.server.port=3000"
 
   # -----------------------------------------------------------------------------------
   # EVOLUTION MÓDULO (A Opcional Motor Externa do Sistema)
@@ -140,8 +141,9 @@ services:
           memory: 1G # Controla vazamentos de Chromium em instâncias leves VPS
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.evolution.rule=PathPrefix(`/evol/`)"
-      - "traefik.http.routers.evolution.entrypoints=web"
+      - "traefik.http.routers.evolution.rule=Host(`api.${DOMAIN_NAME}`) && PathPrefix(`/evol/`)"
+      - "traefik.http.routers.evolution.entrypoints=websecure"
+      - "traefik.http.routers.evolution.tls.certresolver=letsencrypt"
       - "traefik.http.services.evolution.loadbalancer.server.port=8080"
       - "traefik.http.middlewares.strip-evol.stripprefix.prefixes=/evol"
       - "traefik.http.routers.evolution.middlewares=strip-evol"
@@ -149,6 +151,7 @@ services:
 volumes:
   redis_data:
   postgres_data:
+
 
 networks:
   app_network:

@@ -10,6 +10,7 @@ const envSchema = z.object({
   INSTANCE_NAME: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   WEBHOOK_GLOBAL_SECRET: z.string().default('default-secret-change-me'),
+  FRONTEND_URL: z.string().url().optional(),
 });
 
 const _env = envSchema.safeParse(process.env);

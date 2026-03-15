@@ -10,6 +10,23 @@ export class EvolutionWebhookController {
     try {
       logger.info({ event: payload.event, payload }, '➡️ [WEBHOOK RAW] Payload Recebido da Evolution');
 
+      // 0. Tratar Evento de Sincronização de Conexão (Redundância)
+      if (payload.event === 'connection.update') {
+        const { EvolutionConnectionSchema } = await import('../validators/EvolutionWebhookValidator');
+        const connData = EvolutionConnectionSchema.parse(payload);
+        const state = connData.data.state || 'close'; // fallbacks pra closed se der ruim
+
+        if (state === 'open' || state === 'close' || state === 'connecting') {
+          const { prisma } = await import('@app-disparo/database');
+          await prisma.instance.updateMany({
+            where: { name: connData.instance },
+            data: { status: state }
+          });
+          logger.info(`📱 [Status Sync] Instância ${connData.instance} agora está marcada como ${state}.`);
+        }
+        return reply.status(200).send({ message: 'Sync connection state applied.' });
+      }
+
       // 1. Somente lida se o evento for 'messages.upsert'
       // O Evolution API envia outros eventos, mas aqui no início focamos em mensagens recebidas
       if (payload.event !== 'messages.upsert') {
@@ -24,15 +41,15 @@ export class EvolutionWebhookController {
 
       // Se a mensagem for de nós mesmos, não queremos acionar robôs/loops
       if (isFromMe) {
-         logger.debug('Mensagem enviada por mim (fromMe), ignorando para não gerar looping.');
-         return reply.status(200).send({ message: 'Ignore' });
+        logger.debug('Mensagem enviada por mim (fromMe), ignorando para não gerar looping.');
+        return reply.status(200).send({ message: 'Ignore' });
       }
-      
+
       const remoteJid = validatedData.data.key.remoteJid;
       // Garante que é uma DMs (1x1) e não grupo. Dependendo da regra de negócios, você pode remover esse `.endsWith`
       if (!remoteJid.endsWith('@s.whatsapp.net')) {
-          logger.debug({ jid: remoteJid }, 'Ignorando mensagem de grupo');
-          return reply.status(200).send({ message: 'Grupo ignorado' });
+        logger.debug({ jid: remoteJid }, 'Ignorando mensagem de grupo');
+        return reply.status(200).send({ message: 'Grupo ignorado' });
       }
 
       // 2. Coloca os Dados Validados na Fila para processamento posterior
@@ -43,7 +60,7 @@ export class EvolutionWebhookController {
         .header('bypass-tunnel-reminder', 'true')
         .status(200)
         .send({ message: 'Webhook Accepted and Queued for Processing' });
-        
+
     } catch (error: any) {
       if (error.name === 'ZodError') {
         logger.warn({ issues: error.issues }, 'Payload Webhook descartado na Validação Zod');

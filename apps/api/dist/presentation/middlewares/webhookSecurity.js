@@ -28,7 +28,7 @@ async function verifyWebhookSignature(request, reply) {
         if (platform === 'shopify') {
             // Shopify usa HMAC-SHA256 no Header 'x-shopify-hmac-sha256'
             const hmacHeader = request.headers['x-shopify-hmac-sha256'];
-            const secret = credentials?.webhookSecret;
+            const secret = credentials?.token || credentials?.webhookSecret;
             if (!hmacHeader || !secret)
                 throw new Error('Missing Shopify HMAC');
             // Calcula o Hash do Body cru recebido (raw body) comparando com o Segredo configurado
@@ -48,10 +48,12 @@ async function verifyWebhookSignature(request, reply) {
         else if (platform === 'appmax') {
             // Appmax pode usar um access_token na própria querystring ou Header
             const token = request.query ? request.query.token : null;
-            if (!token || token !== credentials?.apiToken) {
+            if (!token || token !== credentials?.apiToken && token !== credentials?.token) {
                 throw new Error('Invalid Appmax API Token Reference');
             }
         }
+        // Sucesso - Injeta a integração validada no Request para evitar nova query no DB
+        request.integrationDetails = integration;
     }
     catch (err) {
         pino_1.logger.error({ ip: request.ip, err: err.message }, '🚨 BLOQUEIO DE SEGURANÇA: Assinatura de Webhook Inválida (Spoofing Detected)');

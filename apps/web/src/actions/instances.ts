@@ -2,6 +2,7 @@
 
 import { prisma } from '@app-disparo/database';
 import { revalidatePath } from 'next/cache';
+import { getActiveStoreId } from '@/lib/store';
 
 const EVO_KEY = process.env.EVO_KEY || process.env.EVOLUTION_API_KEY || '123456';
 const EVO_INTERNAL_URL = process.env.EVOLUTION_INTERNAL_URL || 'http://evolution_api:8080';
@@ -44,7 +45,31 @@ export async function fetchEvoInstances() {
     const { ok, data } = await evoFetch('/instance/fetchInstances');
     if (!ok) return { instances: [], error: 'Evolution API recusou a requisição' };
     const list = Array.isArray(data) ? data : (data?.value || []);
-    return { instances: list.map((i: any) => i.instance || i), error: null };
+
+    // Filtra para exibir apenas instâncias da Loja Ativa
+    const storeId = await getActiveStoreId();
+    const dbInstances = await prisma.instance.findMany({
+      where: { storeId },
+      include: { agent: true }
+    });
+
+    // Mapeamento otimizado de Instâncias do Banco
+    const dbInstanceMap = new Map(dbInstances.map(d => [d.name, d]));
+
+    const storeEvoInstances = list.filter((i: any) => {
+      const name = i.instance?.instanceName || i.instanceName || i.name || (typeof i === 'string' ? i : '');
+      return dbInstanceMap.has(name);
+    }).map((i: any) => {
+      const name = i.instance?.instanceName || i.instanceName || i.name || (typeof i === 'string' ? i : '');
+      const dbInfo = dbInstanceMap.get(name);
+      return {
+        ...(i.instance || i),
+        agentId: dbInfo?.agentId || null,
+        agentName: dbInfo?.agent?.name || null
+      };
+    });
+
+    return { instances: storeEvoInstances, error: null };
   } catch (e: any) {
     return { instances: [], error: `Evolution API indisponível: ${e.message}` };
   }
@@ -77,12 +102,13 @@ export async function createInstance(name: string) {
     const connectRes = await evoFetch(`/instance/connect/${instanceName}`);
     const qrCode = extractBase64(connectRes.data) || extractBase64(createRes.data);
 
-    // Passo 3: Salva no banco PostgreSQL
+    // Passo 3: Salva no banco PostgreSQL vinculado à loja
+    const storeId = await getActiveStoreId();
     const existing = await prisma.instance.findFirst({ where: { name: instanceName } });
     if (existing) {
-      await prisma.instance.update({ where: { id: existing.id }, data: { status: 'connecting' } });
+      await prisma.instance.update({ where: { id: existing.id }, data: { status: 'connecting', storeId } });
     } else {
-      await prisma.instance.create({ data: { name: instanceName, status: 'connecting' } });
+      await prisma.instance.create({ data: { name: instanceName, status: 'connecting', storeId } });
     }
 
     revalidatePath('/dashboard/instances');
@@ -115,8 +141,13 @@ export async function getQrCode(instanceName: string) {
 // Deleta uma instância da Evolution API e do banco
 export async function deleteInstance(instanceName: string) {
   try {
+    const storeId = await getActiveStoreId();
+
+    // Deleta do DB primeiro para garantir o tenant
+    await prisma.instance.deleteMany({ where: { name: instanceName, storeId } });
+
+    // Tenta deletar na API
     await evoFetch(`/instance/delete/${instanceName}`, { method: 'DELETE' });
-    await prisma.instance.deleteMany({ where: { name: instanceName } });
     revalidatePath('/dashboard/instances');
     return { success: true };
   } catch (error: any) {
@@ -127,12 +158,32 @@ export async function deleteInstance(instanceName: string) {
 // Sincroniza o status de uma instância da Evolution API para o banco
 export async function syncInstanceStatus(instanceName: string, status: string, remoteJid?: string) {
   try {
-    const existing = await prisma.instance.findFirst({ where: { name: instanceName } });
+    const storeId = await getActiveStoreId();
+    const existing = await prisma.instance.findFirst({ where: { name: instanceName, storeId } });
     if (existing) {
       await prisma.instance.update({ where: { id: existing.id }, data: { status, remoteJid: remoteJid || null } });
     } else {
-      await prisma.instance.create({ data: { name: instanceName, status, remoteJid: remoteJid || null } });
+      await prisma.instance.create({ data: { name: instanceName, status, remoteJid: remoteJid || null, storeId } });
     }
+    revalidatePath('/dashboard/instances');
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Vincula (ou desvincula) um Agente IA a uma Instância Específica
+export async function updateInstanceAgent(instanceName: string, agentId: string | null) {
+  try {
+    const storeId = await getActiveStoreId();
+    const existing = await prisma.instance.findFirst({ where: { name: instanceName, storeId } });
+    if (!existing) return { success: false, error: 'Instância não dita no banco.' };
+
+    await prisma.instance.update({
+      where: { id: existing.id },
+      data: { agentId } // Conecta ou Desconecta (null)
+    });
+
     revalidatePath('/dashboard/instances');
     return { success: true };
   } catch (error: any) {

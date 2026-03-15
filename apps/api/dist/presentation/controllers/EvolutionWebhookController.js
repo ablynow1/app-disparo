@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EvolutionWebhookController = void 0;
 const pino_1 = require("../../infrastructure/logger/pino");
@@ -9,6 +42,21 @@ class EvolutionWebhookController {
         const payload = request.body;
         try {
             pino_1.logger.info({ event: payload.event, payload }, '➡️ [WEBHOOK RAW] Payload Recebido da Evolution');
+            // 0. Tratar Evento de Sincronização de Conexão (Redundância)
+            if (payload.event === 'connection.update') {
+                const { EvolutionConnectionSchema } = await Promise.resolve().then(() => __importStar(require('../validators/EvolutionWebhookValidator')));
+                const connData = EvolutionConnectionSchema.parse(payload);
+                const state = connData.data.state || 'close'; // fallbacks pra closed se der ruim
+                if (state === 'open' || state === 'close' || state === 'connecting') {
+                    const { prisma } = await Promise.resolve().then(() => __importStar(require('@app-disparo/database')));
+                    await prisma.instance.updateMany({
+                        where: { name: connData.instance },
+                        data: { status: state }
+                    });
+                    pino_1.logger.info(`📱 [Status Sync] Instância ${connData.instance} agora está marcada como ${state}.`);
+                }
+                return reply.status(200).send({ message: 'Sync connection state applied.' });
+            }
             // 1. Somente lida se o evento for 'messages.upsert'
             // O Evolution API envia outros eventos, mas aqui no início focamos em mensagens recebidas
             if (payload.event !== 'messages.upsert') {

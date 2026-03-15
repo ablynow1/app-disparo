@@ -25,3 +25,14 @@ export const EvolutionMessageSchema = z.object({
 
 // Extract type automatically from Zod schema
 export type EvolutionMessagePayload = z.infer<typeof EvolutionMessageSchema>;
+
+export const EvolutionConnectionSchema = z.object({
+  event: z.literal('connection.update'),
+  instance: z.string(),
+  data: z.object({
+    state: z.enum(['open', 'close', 'connecting', 'refused']).optional(), // states usually returned by bailey
+    statusReason: z.number().optional(),
+  }).passthrough(),
+}).passthrough();
+
+export type EvolutionConnectionPayload = z.infer<typeof EvolutionConnectionSchema>;

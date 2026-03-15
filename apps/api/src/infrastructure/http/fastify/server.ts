@@ -27,9 +27,9 @@ app.register(helmet, {
 
 // HARDENING 2: CORS Estrito - Impedindo que painéis não autorizados disparem requests direto pro backend pelo navegador
 app.register(cors, {
-  origin: env.NODE_ENV === 'production' 
-     ? ['https://appdisparo.com.br', 'https://dash.appdisparo.com.br'] // Somente nosso dominio de painel
-     : '*', // Liberado pra localhost debug
+  origin: env.NODE_ENV === 'production'
+    ? [env.FRONTEND_URL || 'https://appdisparo.com.br']
+    : '*', // Liberado pra localhost debug
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true, // Exige autenticação em Cookies/Tokens
 });
@@ -40,8 +40,8 @@ app.register(rateLimit, {
   timeWindow: '1 minute', // Por Minuto por IP
   keyGenerator: (req) => req.ip,
   errorResponseBuilder: () => ({
-     statusCode: 429,
-     message: 'Você ultrapassou o volume de requisições tolerável. Reduza a carga (Too Many Requests).'
+    statusCode: 429,
+    message: 'Você ultrapassou o volume de requisições tolerável. Reduza a carga (Too Many Requests).'
   })
 });
 
@@ -85,7 +85,7 @@ const gracefulShutdown = async (signal: string) => {
     await orderRoutingWorker.close();
     await evolutionOutboundWorker.close();
     logger.info('⏸️  [2/4] Workers BullMQ terminaram os Jobs em andamento com segurança.');
-    
+
     // 3. Fecha o Cachorro Assíncrono do Backing Track
     await evolutionWebhookQueue.close();
     await orderRoutingQueue.close();

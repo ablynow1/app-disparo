@@ -12,7 +12,13 @@ exports.evolutionWebhookQueue = new bullmq_1.Queue(exports.EVOLUTION_WEBHOOK_QUE
             type: 'exponential',
             delay: 5000, // 5s, 25s, 125s in case of failure (OpenAI timeout)
         },
-        removeOnComplete: true, // Keep Redis memory clean
-        removeOnFail: false, // Keep trace of failed jobs for manual review or DLQ
+        removeOnComplete: {
+            age: 24 * 3600,
+            count: 1000,
+        },
+        removeOnFail: {
+            age: 7 * 24 * 3600,
+            count: 5000
+        }
     },
 });

@@ -32,7 +32,7 @@ app.register(helmet_1.default, {
 // HARDENING 2: CORS Estrito - Impedindo que painéis não autorizados disparem requests direto pro backend pelo navegador
 app.register(cors_1.default, {
     origin: env_1.env.NODE_ENV === 'production'
-        ? ['https://appdisparo.com.br', 'https://dash.appdisparo.com.br'] // Somente nosso dominio de painel
+        ? [env_1.env.FRONTEND_URL || 'https://appdisparo.com.br']
         : '*', // Liberado pra localhost debug
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true, // Exige autenticação em Cookies/Tokens
