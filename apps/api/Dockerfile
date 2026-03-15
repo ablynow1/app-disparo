@@ -41,8 +41,7 @@ RUN pnpm --filter @app-disparo/database run db:generate
 # Injeta a base de configurações explícita do Typescript que é procurada pela API
 COPY tsconfig.base.json ./tsconfig.base.json
 
-# Compila o banco de dados e a API para javascript puro na pasta dist/
-RUN pnpm turbo run build --filter=@app-disparo/database...
+# Compila apenas a API para javascript puro na pasta dist/
 RUN pnpm turbo run build --filter=api...
 
 # ==========================================
