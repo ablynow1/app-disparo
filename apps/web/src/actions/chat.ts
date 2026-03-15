@@ -90,10 +90,28 @@ export async function sendManualMessage(contactId: string, text: string) {
         },
     });
 
-    // Chamar o disparo na Evolution API real
+    // Chamar o disparo na Evolution API real via HTTP
     try {
-        const { EvolutionApiService } = await import('@/../api/src/infrastructure/services/EvolutionApiService');
-        await EvolutionApiService.sendText(activeInstance.name, contact.remoteJid, text);
+        const EVO_URL = process.env.EVOLUTION_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL;
+        const EVO_KEY = process.env.EVO_KEY || '';
+
+        const response = await fetch(`${EVO_URL}/message/sendText/${activeInstance.name}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': EVO_KEY,
+            },
+            body: JSON.stringify({
+                number: contact.remoteJid,
+                text,
+            }),
+        });
+
+        if (!response.ok) {
+            const errBody = await response.text();
+            throw new Error(`Evolution API error: ${response.status} - ${errBody}`);
+        }
+
         return { success: true, message: newMessage };
     } catch (error: any) {
         console.error('Falha ao enviar msg manual:', error);
