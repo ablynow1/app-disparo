@@ -8,6 +8,8 @@ services:
     image: traefik:v3.2
     container_name: traefik_proxy
     restart: unless-stopped
+    environment:
+      - DOCKER_API_VERSION=1.44
     command:
       - "--api.insecure=false"
       - "--providers.docker=true"
