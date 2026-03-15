@@ -5,7 +5,7 @@ services:
   # TRAEFIK: O Porteiro e Agente SSL (Zero-Config Let's Encrypt)
   # -----------------------------------------------------------------------------------
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3.2
     container_name: traefik_proxy
     restart: unless-stopped
     command:
