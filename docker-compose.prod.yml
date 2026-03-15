@@ -86,8 +86,10 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=PathPrefix(`/api`)"
-      - "traefik.http.routers.api.entrypoints=web,websecure"
-      - "traefik.http.routers.api.tls=true"
+      - "traefik.http.routers.api.entrypoints=web"
+      - "traefik.http.routers.api-sec.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.api-sec.entrypoints=websecure"
+      - "traefik.http.routers.api-sec.tls=true"
       - "traefik.http.services.api.loadbalancer.server.port=3333"
 
   # -----------------------------------------------------------------------------------
@@ -112,8 +114,10 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.web.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.web.entrypoints=web,websecure"
-      - "traefik.http.routers.web.tls=true"
+      - "traefik.http.routers.web.entrypoints=web"
+      - "traefik.http.routers.web-sec.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.web-sec.entrypoints=websecure"
+      - "traefik.http.routers.web-sec.tls=true"
       - "traefik.http.services.web.loadbalancer.server.port=3000"
 
   # -----------------------------------------------------------------------------------
@@ -142,11 +146,14 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.evolution.rule=PathPrefix(`/evol`)"
-      - "traefik.http.routers.evolution.entrypoints=web,websecure"
-      - "traefik.http.routers.evolution.tls=true"
+      - "traefik.http.routers.evolution.entrypoints=web"
+      - "traefik.http.routers.evolution-sec.rule=PathPrefix(`/evol`)"
+      - "traefik.http.routers.evolution-sec.entrypoints=websecure"
+      - "traefik.http.routers.evolution-sec.tls=true"
       - "traefik.http.services.evolution.loadbalancer.server.port=8080"
       - "traefik.http.middlewares.strip-evol.stripprefix.prefixes=/evol"
       - "traefik.http.routers.evolution.middlewares=strip-evol"
+      - "traefik.http.routers.evolution-sec.middlewares=strip-evol"
 
 volumes:
   redis_data:
