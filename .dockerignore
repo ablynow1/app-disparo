@@ -1,0 +1,11 @@
+.git
+node_modules
+.next
+.turbo
+dist
+out
+coverage
+.DS_Store
+npm-debug.log
+pnpm-debug.log
+yarn-error.log
